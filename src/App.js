@@ -17,6 +17,7 @@ import axiosInstance from "./app/axiosInstance";
 import GameRoom from "./components/GameRoom";
 import Leaderboard from "./components/Leaderboard";
 import LiveChat from "./components/LiveChat";
+import UserBets from "./components/UserBets";
 import Profile from "./components/Profile";
 import Login from "./components/Login";
 import Register from "./components/Register";
@@ -78,6 +79,8 @@ function Header({ onDepositOpen, onWithdrawOpen }) {
             <Link to="/" className="text-white hover:text-blue-200">
               Game Room
             </Link>
+
+            <Link path="/my-bets" element={<UserBets />} />
             {/* <Link to="/leaderboard" className="text-white hover:text-blue-200">
               Leaderboard
             </Link>

@@ -1,68 +1,96 @@
-// // // // // // src/components/CoinFlip.js
-// src/components/CoinFlip.jsx
-
-// src/components/CoinFlip.jsx
+// // // // // // // src/components/CoinFlip.js
 // src/components/CoinFlip.jsx
 import React, { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+// We'll update our variant to accept an array of keyframes.
 const flipVariants = {
   hidden: { opacity: 0, rotateY: 0 },
-  visible: (finalRotate) => ({
+  visible: (keyframes) => ({
     opacity: 1,
-    // Example multi-rotation: do 3 full flips, then settle at finalRotate
-    rotateY: [0, 360, 720, 1080, finalRotate],
+    rotateY: keyframes,
     transition: { duration: 3, ease: "easeInOut" },
   }),
   exit: { opacity: 0, transition: { duration: 0.5 } },
 };
 
 export default function CoinFlip({ round }) {
-  // Should we show the flipping animation?
+  // Controls whether we are animating.
   const [isFlipping, setIsFlipping] = useState(false);
-  // The final outcome (heads/tails/house)
+  // The outcome to use for the animation (real or simulated)
   const [outcome, setOutcome] = useState(null);
+  // The keyframes for the flip rotation.
+  const [flipKeyframes, setFlipKeyframes] = useState([]);
 
-  // We keep track of the old outcome to detect a change
+  // To track previous outcome (so we animate when it changes)
   const prevOutcomeRef = useRef(null);
 
+  // Check if bets are closed.
+  const betsClosed = round && round.countdownEndTime 
+    ? Date.now() >= new Date(round.countdownEndTime).getTime()
+    : false;
+
+  // When the round updates, trigger the animation either when:
+  // 1. A real outcome is provided and it changed, OR
+  // 2. Bets are closed and no outcome is yet available (simulate a flip).
   useEffect(() => {
     if (!round) return;
-    const newOutcome = round.outcome; // might be null or "heads"/"tails"/"house"
-    const oldOutcome = prevOutcomeRef.current;
+    const realOutcome = round.outcome; // may be null or "heads"/"tails"/"house"
+    const prevOutcome = prevOutcomeRef.current;
 
-    // If the new outcome is defined and different from old => trigger animation
-    if (newOutcome && newOutcome !== oldOutcome) {
-      setOutcome(newOutcome);
+    if (realOutcome && realOutcome !== prevOutcome) {
+      // Use the real outcome.
+      setOutcome(realOutcome);
       setIsFlipping(true);
+      prevOutcomeRef.current = realOutcome;
+    } else if (!realOutcome && betsClosed) {
+      // Bets are closed but no outcome yet; simulate one.
+      // Only trigger if we’re not already flipping.
+      if (!isFlipping) {
+        const possible = ["heads", "tails", "house"];
+        const randomOutcome =
+          possible[Math.floor(Math.random() * possible.length)];
+        setOutcome(randomOutcome);
+        setIsFlipping(true);
+      }
     }
-    prevOutcomeRef.current = newOutcome;
-  }, [round]);
+  }, [round, betsClosed, isFlipping]);
 
-  // Determine final rotation
-  let finalRotate = 0;
-  if (outcome === "tails") {
-    finalRotate = 180;
-  } else if (outcome === "house") {
-    // example: 90 deg for "edge"
-    finalRotate = 90;
-  }
-  // "heads" => 0 deg (face up)
+  // Whenever we start flipping (with a determined outcome), compute random keyframes.
+  useEffect(() => {
+    if (isFlipping && outcome) {
+      // Determine the base angle for the outcome.
+      const baseAngle =
+        outcome === "tails" ? 180 : outcome === "house" ? 90 : 0;
+      // Choose a random number of full flips (between 2 and 4, for example)
+      const fullFlips = Math.floor(Math.random() * 3) + 2; // 2,3,or 4
+      const totalRotation = fullFlips * 360 + baseAngle;
+      // Create an array of keyframes for a smooth animation.
+      const keyframes = [
+        0,
+        totalRotation * 0.25,
+        totalRotation * 0.5,
+        totalRotation * 0.75,
+        totalRotation,
+      ];
+      setFlipKeyframes(keyframes);
+    }
+  }, [isFlipping, outcome]);
 
   return (
     <div className="mt-4 flex justify-center">
       <AnimatePresence>
-        {isFlipping && outcome && (
+        {isFlipping && outcome && flipKeyframes.length > 0 && (
           <motion.div
-            key={outcome} // important for AnimatePresence
+            key={outcome} // ensures a re-animation on outcome change
             className="w-24 h-24 bg-yellow-300 rounded-full flex items-center justify-center text-2xl font-bold"
-            custom={finalRotate}
+            custom={flipKeyframes}
             variants={flipVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
             onAnimationComplete={() => {
-              // Once animation ends, we stop flipping
+              // Stop flipping when the animation completes.
               setIsFlipping(false);
             }}
           >
@@ -79,12 +107,99 @@ export default function CoinFlip({ round }) {
 
       {!isFlipping && (
         <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-2xl font-bold">
-          {outcome || "?"}
+          {outcome ? (outcome === "heads" ? "H" : outcome === "tails" ? "T" : outcome === "house" ? "EDGE" : "?") : "?"}
         </div>
       )}
     </div>
   );
 }
+
+// // src/components/CoinFlip.jsx
+
+// // src/components/CoinFlip.jsx
+// // src/components/CoinFlip.jsx
+// import React, { useEffect, useState, useRef } from "react";
+// import { motion, AnimatePresence } from "framer-motion";
+
+// const flipVariants = {
+//   hidden: { opacity: 0, rotateY: 0 },
+//   visible: (finalRotate) => ({
+//     opacity: 1,
+//     // Example multi-rotation: do 3 full flips, then settle at finalRotate
+//     rotateY: [0, 360, 720, 1080, finalRotate],
+//     transition: { duration: 3, ease: "easeInOut" },
+//   }),
+//   exit: { opacity: 0, transition: { duration: 0.5 } },
+// };
+
+// export default function CoinFlip({ round }) {
+//   // Should we show the flipping animation?
+//   const [isFlipping, setIsFlipping] = useState(false);
+//   // The final outcome (heads/tails/house)
+//   const [outcome, setOutcome] = useState(null);
+
+//   // We keep track of the old outcome to detect a change
+//   const prevOutcomeRef = useRef(null);
+
+//   useEffect(() => {
+//     if (!round) return;
+//     const newOutcome = round.outcome; // might be null or "heads"/"tails"/"house"
+//     const oldOutcome = prevOutcomeRef.current;
+
+//     // If the new outcome is defined and different from old => trigger animation
+//     if (newOutcome && newOutcome !== oldOutcome) {
+//       setOutcome(newOutcome);
+//       setIsFlipping(true);
+//     }
+//     prevOutcomeRef.current = newOutcome;
+//   }, [round]);
+
+//   // Determine final rotation
+//   let finalRotate = 0;
+//   if (outcome === "tails") {
+//     finalRotate = 180;
+//   } else if (outcome === "house") {
+//     // example: 90 deg for "edge"
+//     finalRotate = 90;
+//   }
+//   // "heads" => 0 deg (face up)
+
+//   return (
+//     <div className="mt-4 flex justify-center">
+//       <AnimatePresence>
+//         {isFlipping && outcome && (
+//           <motion.div
+//             key={outcome} // important for AnimatePresence
+//             className="w-24 h-24 bg-yellow-300 rounded-full flex items-center justify-center text-2xl font-bold"
+//             custom={finalRotate}
+//             variants={flipVariants}
+//             initial="hidden"
+//             animate="visible"
+//             exit="exit"
+//             onAnimationComplete={() => {
+//               // Once animation ends, we stop flipping
+//               setIsFlipping(false);
+//             }}
+//           >
+//             {outcome === "heads"
+//               ? "H"
+//               : outcome === "tails"
+//               ? "T"
+//               : outcome === "house"
+//               ? "EDGE"
+//               : "?"}
+//           </motion.div>
+//         )}
+//       </AnimatePresence>
+
+//       {!isFlipping && (
+//         <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-2xl font-bold">
+//           {outcome || "?"}
+//         </div>
+//       )}
+//     </div>
+//   );
+// }
 
 
 // src/components/CoinFlip.jsx

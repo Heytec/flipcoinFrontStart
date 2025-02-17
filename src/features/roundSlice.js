@@ -1,9 +1,9 @@
-// // // // // src/features/roundSlice.js
+// // // // // // // src/features/roundSlice.js
 // src/features/roundSlice.js
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axiosInstance from "../app/axiosInstance";
 
-// Thunk to fetch the current active round.
+// Existing thunks...
 export const fetchCurrentRound = createAsyncThunk(
   "round/fetchCurrentRound",
   async (_, thunkAPI) => {
@@ -16,7 +16,6 @@ export const fetchCurrentRound = createAsyncThunk(
   }
 );
 
-// Thunk to fetch the current jackpot.
 export const fetchJackpotPool = createAsyncThunk(
   "round/fetchJackpotPool",
   async (_, thunkAPI) => {
@@ -29,7 +28,6 @@ export const fetchJackpotPool = createAsyncThunk(
   }
 );
 
-// Thunk to place a bet.
 export const placeBet = createAsyncThunk(
   "round/placeBet",
   async (betData, thunkAPI) => {
@@ -43,7 +41,6 @@ export const placeBet = createAsyncThunk(
   }
 );
 
-// Thunk to start a new round (if needed).
 export const startRound = createAsyncThunk(
   "round/startRound",
   async (_, thunkAPI) => {
@@ -51,6 +48,37 @@ export const startRound = createAsyncThunk(
       const response = await axiosInstance.get("/game/startRound");
       // Assume response.data has a property `round`
       return response.data.round;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+
+
+// NEW: Thunk to fetch paginated user bets.
+export const fetchUserBets = createAsyncThunk(
+  "round/fetchUserBets",
+  async (page = 1, thunkAPI) => {
+    try {
+      const response = await axiosInstance.get(`/game/my-bets?page=${page}`);
+      // Expected response: { bets, totalBets, totalPages, currentPage }
+      return response.data;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+
+// NEW: Thunk to fetch top winning bets filtered by period (daily, weekly, monthly)
+export const fetchTopWins = createAsyncThunk(
+  "round/fetchTopWins",
+  async (filter = "daily", thunkAPI) => {
+    try {
+      const response = await axiosInstance.get(`/game/top-wins?filter=${filter}`);
+      // Expected response: { topWins: [ ... ] }
+      return { topWins: response.data.topWins, filter };
     } catch (error) {
       return thunkAPI.rejectWithValue(error.response?.data || error.message);
     }
@@ -65,12 +93,20 @@ const roundSlice = createSlice({
     betResults: [],               // Individual bet updates
     aggregatedBetResults: [],     // Aggregated results for all bets
     participantResults: [],       // Aggregated results by participant
+    userBets: [],                 // Paginated user bets
+    betsPagination: {             // Pagination info for user bets
+      totalBets: 0,
+      totalPages: 0,
+      currentPage: 1,
+    },
+    // NEW state for top wins
+    topWins: [],
+    topWinsFilter: "daily",       // default filter
     loading: false,
     error: null,
     lastBet: null,
   },
   reducers: {
-    // Example custom reducers
     roundUpdated: (state, action) => {
       state.currentRound = action.payload;
     },
@@ -87,19 +123,11 @@ const roundSlice = createSlice({
         state.betResults.push(action.payload);
       }
     },
-    // aggregatedBetResultsReceived: (state, action) => {
-    //   state.aggregatedBetResults = action.payload.results;
-    // },
-    // participantResultsReceived: (state, action) => {
-    //   state.participantResults = action.payload.results;
-    // },
     jackpotUpdated: (state, action) => {
       if (typeof action.payload.jackpotPool === "number") {
         state.jackpot = action.payload.jackpotPool;
       }
     },
-
-    // ADD THIS: Clears the Redux error.
     clearError: (state) => {
       state.error = null;
     },
@@ -119,7 +147,6 @@ const roundSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-
       // fetchJackpotPool
       .addCase(fetchJackpotPool.pending, (state) => {
         state.loading = true;
@@ -135,7 +162,6 @@ const roundSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-
       // placeBet
       .addCase(placeBet.pending, (state) => {
         state.loading = true;
@@ -151,7 +177,6 @@ const roundSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-
       // startRound
       .addCase(startRound.pending, (state) => {
         state.loading = true;
@@ -164,6 +189,38 @@ const roundSlice = createSlice({
       .addCase(startRound.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      // fetchUserBets
+      .addCase(fetchUserBets.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchUserBets.fulfilled, (state, action) => {
+        state.loading = false;
+        state.userBets = action.payload.bets;
+        state.betsPagination = {
+          totalBets: action.payload.totalBets,
+          totalPages: action.payload.totalPages,
+          currentPage: action.payload.currentPage,
+        };
+      })
+      .addCase(fetchUserBets.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // NEW: fetchTopWins
+      .addCase(fetchTopWins.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchTopWins.fulfilled, (state, action) => {
+        state.loading = false;
+        state.topWins = action.payload.topWins;
+        state.topWinsFilter = action.payload.filter;
+      })
+      .addCase(fetchTopWins.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       });
   },
 });
@@ -172,13 +229,403 @@ export const {
   roundUpdated,
   roundResultReceived,
   betResultReceived,
-  //aggregatedBetResultsReceived,
-  //participantResultsReceived,
   jackpotUpdated,
-  clearError, // Export clearError to use in components
+  clearError,
 } = roundSlice.actions;
 
 export default roundSlice.reducer;
+
+
+// // src/features/roundSlice.js
+// import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+// import axiosInstance from "../app/axiosInstance";
+
+// // Thunk to fetch the current active round.
+// export const fetchCurrentRound = createAsyncThunk(
+//   "round/fetchCurrentRound",
+//   async (_, thunkAPI) => {
+//     try {
+//       const response = await axiosInstance.get("/game/currentRound");
+//       return response.data;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response?.data || error.message);
+//     }
+//   }
+// );
+
+// // Thunk to fetch the current jackpot.
+// export const fetchJackpotPool = createAsyncThunk(
+//   "round/fetchJackpotPool",
+//   async (_, thunkAPI) => {
+//     try {
+//       const response = await axiosInstance.get("/game/jackpot");
+//       return response.data;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response?.data || error.message);
+//     }
+//   }
+// );
+
+// // Thunk to place a bet.
+// export const placeBet = createAsyncThunk(
+//   "round/placeBet",
+//   async (betData, thunkAPI) => {
+//     try {
+//       const response = await axiosInstance.post("/game/bet", betData);
+//       // expected: { message, bet: [ ... ] }
+//       return response.data;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response?.data || error.message);
+//     }
+//   }
+// );
+
+// // Thunk to start a new round (if needed).
+// export const startRound = createAsyncThunk(
+//   "round/startRound",
+//   async (_, thunkAPI) => {
+//     try {
+//       const response = await axiosInstance.get("/game/startRound");
+//       // Assume response.data has a property `round`
+//       return response.data.round;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response?.data || error.message);
+//     }
+//   }
+// );
+
+// // NEW: Thunk to fetch paginated user bets.
+// export const fetchUserBets = createAsyncThunk(
+//   "round/fetchUserBets",
+//   async (page = 1, thunkAPI) => {
+//     try {
+//       const response = await axiosInstance.get(`/game/my-bets?page=${page}`);
+//       // Expected response: { bets, totalBets, totalPages, currentPage }
+//       return response.data;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response?.data || error.message);
+//     }
+//   }
+// );
+
+// const roundSlice = createSlice({
+//   name: "round",
+//   initialState: {
+//     currentRound: null,           // Active round data
+//     jackpot: 0,                   // Current jackpot amount
+//     betResults: [],               // Individual bet updates
+//     aggregatedBetResults: [],     // Aggregated results for all bets
+//     participantResults: [],       // Aggregated results by participant
+//     userBets: [],                 // Paginated user bets
+//     betsPagination: {             // Pagination info for user bets
+//       totalBets: 0,
+//       totalPages: 0,
+//       currentPage: 1,
+//     },
+//     loading: false,
+//     error: null,
+//     lastBet: null,
+//   },
+//   reducers: {
+//     roundUpdated: (state, action) => {
+//       state.currentRound = action.payload;
+//     },
+//     roundResultReceived: (state, action) => {
+//       state.currentRound = action.payload.round;
+//     },
+//     betResultReceived: (state, action) => {
+//       const index = state.betResults.findIndex(
+//         (bet) => bet.betId === action.payload.betId
+//       );
+//       if (index !== -1) {
+//         state.betResults[index] = action.payload;
+//       } else {
+//         state.betResults.push(action.payload);
+//       }
+//     },
+//     jackpotUpdated: (state, action) => {
+//       if (typeof action.payload.jackpotPool === "number") {
+//         state.jackpot = action.payload.jackpotPool;
+//       }
+//     },
+//     clearError: (state) => {
+//       state.error = null;
+//     },
+//   },
+//   extraReducers: (builder) => {
+//     builder
+//       // fetchCurrentRound
+//       .addCase(fetchCurrentRound.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(fetchCurrentRound.fulfilled, (state, action) => {
+//         state.loading = false;
+//         state.currentRound = action.payload;
+//       })
+//       .addCase(fetchCurrentRound.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload;
+//       })
+
+//       // fetchJackpotPool
+//       .addCase(fetchJackpotPool.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(fetchJackpotPool.fulfilled, (state, action) => {
+//         state.loading = false;
+//         if (typeof action.payload?.jackpotPool === "number") {
+//           state.jackpot = action.payload.jackpotPool;
+//         }
+//       })
+//       .addCase(fetchJackpotPool.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload;
+//       })
+
+//       // placeBet
+//       .addCase(placeBet.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(placeBet.fulfilled, (state, action) => {
+//         state.loading = false;
+//         const betArray = action.payload.bet;
+//         state.lastBet =
+//           Array.isArray(betArray) && betArray.length > 0 ? betArray[0] : null;
+//       })
+//       .addCase(placeBet.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload;
+//       })
+
+//       // startRound
+//       .addCase(startRound.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(startRound.fulfilled, (state, action) => {
+//         state.loading = false;
+//         state.currentRound = action.payload;
+//       })
+//       .addCase(startRound.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload;
+//       })
+
+//       // fetchUserBets
+//       .addCase(fetchUserBets.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(fetchUserBets.fulfilled, (state, action) => {
+//         state.loading = false;
+//         // Expected response: { bets, totalBets, totalPages, currentPage }
+//         state.userBets = action.payload.bets;
+//         state.betsPagination = {
+//           totalBets: action.payload.totalBets,
+//           totalPages: action.payload.totalPages,
+//           currentPage: action.payload.currentPage,
+//         };
+//       })
+//       .addCase(fetchUserBets.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload;
+//       });
+//   },
+// });
+
+// export const {
+//   roundUpdated,
+//   roundResultReceived,
+//   betResultReceived,
+//   jackpotUpdated,
+//   clearError,
+// } = roundSlice.actions;
+
+// export default roundSlice.reducer;
+
+// // src/features/roundSlice.js
+// import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+// import axiosInstance from "../app/axiosInstance";
+
+// // Thunk to fetch the current active round.
+// export const fetchCurrentRound = createAsyncThunk(
+//   "round/fetchCurrentRound",
+//   async (_, thunkAPI) => {
+//     try {
+//       const response = await axiosInstance.get("/game/currentRound");
+//       return response.data;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response?.data || error.message);
+//     }
+//   }
+// );
+
+// // Thunk to fetch the current jackpot.
+// export const fetchJackpotPool = createAsyncThunk(
+//   "round/fetchJackpotPool",
+//   async (_, thunkAPI) => {
+//     try {
+//       const response = await axiosInstance.get("/game/jackpot");
+//       return response.data;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response?.data || error.message);
+//     }
+//   }
+// );
+
+// // Thunk to place a bet.
+// export const placeBet = createAsyncThunk(
+//   "round/placeBet",
+//   async (betData, thunkAPI) => {
+//     try {
+//       const response = await axiosInstance.post("/game/bet", betData);
+//       // expected: { message, bet: [ ... ] }
+//       return response.data;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response?.data || error.message);
+//     }
+//   }
+// );
+
+// // Thunk to start a new round (if needed).
+// export const startRound = createAsyncThunk(
+//   "round/startRound",
+//   async (_, thunkAPI) => {
+//     try {
+//       const response = await axiosInstance.get("/game/startRound");
+//       // Assume response.data has a property `round`
+//       return response.data.round;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response?.data || error.message);
+//     }
+//   }
+// );
+
+// const roundSlice = createSlice({
+//   name: "round",
+//   initialState: {
+//     currentRound: null,           // Active round data
+//     jackpot: 0,                   // Current jackpot amount
+//     betResults: [],               // Individual bet updates
+//     aggregatedBetResults: [],     // Aggregated results for all bets
+//     participantResults: [],       // Aggregated results by participant
+//     loading: false,
+//     error: null,
+//     lastBet: null,
+//   },
+//   reducers: {
+//     // Example custom reducers
+//     roundUpdated: (state, action) => {
+//       state.currentRound = action.payload;
+//     },
+//     roundResultReceived: (state, action) => {
+//       state.currentRound = action.payload.round;
+//     },
+//     betResultReceived: (state, action) => {
+//       const index = state.betResults.findIndex(
+//         (bet) => bet.betId === action.payload.betId
+//       );
+//       if (index !== -1) {
+//         state.betResults[index] = action.payload;
+//       } else {
+//         state.betResults.push(action.payload);
+//       }
+//     },
+//     // aggregatedBetResultsReceived: (state, action) => {
+//     //   state.aggregatedBetResults = action.payload.results;
+//     // },
+//     // participantResultsReceived: (state, action) => {
+//     //   state.participantResults = action.payload.results;
+//     // },
+//     jackpotUpdated: (state, action) => {
+//       if (typeof action.payload.jackpotPool === "number") {
+//         state.jackpot = action.payload.jackpotPool;
+//       }
+//     },
+
+//     // ADD THIS: Clears the Redux error.
+//     clearError: (state) => {
+//       state.error = null;
+//     },
+//   },
+//   extraReducers: (builder) => {
+//     builder
+//       // fetchCurrentRound
+//       .addCase(fetchCurrentRound.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(fetchCurrentRound.fulfilled, (state, action) => {
+//         state.loading = false;
+//         state.currentRound = action.payload;
+//       })
+//       .addCase(fetchCurrentRound.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload;
+//       })
+
+//       // fetchJackpotPool
+//       .addCase(fetchJackpotPool.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(fetchJackpotPool.fulfilled, (state, action) => {
+//         state.loading = false;
+//         if (typeof action.payload?.jackpotPool === "number") {
+//           state.jackpot = action.payload.jackpotPool;
+//         }
+//       })
+//       .addCase(fetchJackpotPool.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload;
+//       })
+
+//       // placeBet
+//       .addCase(placeBet.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(placeBet.fulfilled, (state, action) => {
+//         state.loading = false;
+//         const betArray = action.payload.bet;
+//         state.lastBet =
+//           Array.isArray(betArray) && betArray.length > 0 ? betArray[0] : null;
+//       })
+//       .addCase(placeBet.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload;
+//       })
+
+//       // startRound
+//       .addCase(startRound.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(startRound.fulfilled, (state, action) => {
+//         state.loading = false;
+//         state.currentRound = action.payload;
+//       })
+//       .addCase(startRound.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload;
+//       });
+//   },
+// });
+
+// export const {
+//   roundUpdated,
+//   roundResultReceived,
+//   betResultReceived,
+//   //aggregatedBetResultsReceived,
+//   //participantResultsReceived,
+//   jackpotUpdated,
+//   clearError, // Export clearError to use in components
+// } = roundSlice.actions;
+
+// export default roundSlice.reducer;
 
 
 
