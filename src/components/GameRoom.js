@@ -1,4 +1,4 @@
-// // // // // // src/components/GameRoom.js
+// // // // // // // src/components/GameRoom.js
 // Inside GameRoom.js
 
 import React, { useEffect, useState, useRef } from "react";
@@ -29,7 +29,6 @@ export default function GameRoom() {
     currentRound,
     jackpot,
     betResults = [],
-    // aggregatedBetResults, // We'll use betResults directly
     loading,
     error,
   } = useSelector((state) => state.round);
@@ -128,20 +127,20 @@ export default function GameRoom() {
 
   // 6. Filter bets by side (heads/tails) for the current round only.
   const currentRoundId = currentRound ? currentRound._id : null;
-  const headBets =
-    currentRoundId &&
-    betResults.filter(
-      (bet) =>
-        bet.side === "heads" &&
-        (bet.gameRound || bet.roundId) === currentRoundId
-    );
-  const tailBets =
-    currentRoundId &&
-    betResults.filter(
-      (bet) =>
-        bet.side === "tails" &&
-        (bet.gameRound || bet.roundId) === currentRoundId
-    );
+  const headBets = currentRoundId
+    ? betResults.filter(
+        (bet) =>
+          bet.side === "heads" &&
+          (bet.gameRound || bet.roundId) === currentRoundId
+      )
+    : [];
+  const tailBets = currentRoundId
+    ? betResults.filter(
+        (bet) =>
+          bet.side === "tails" &&
+          (bet.gameRound || bet.roundId) === currentRoundId
+      )
+    : [];
 
   return (
     <div className="max-w-6xl mx-auto p-6">
@@ -358,6 +357,366 @@ export default function GameRoom() {
     </div>
   );
 }
+
+// // Inside GameRoom.js
+
+// import React, { useEffect, useState, useRef } from "react";
+// import { useDispatch, useSelector } from "react-redux";
+// import {
+//   fetchCurrentRound,
+//   fetchJackpotPool,
+//   clearError,
+// } from "../features/roundSlice";
+// import useAblyGameRoom from "../hooks/useAblyGameRoom";
+// import BetForm from "./BetForm";
+// import CoinFlip from "./CoinFlip";
+// import { toast } from "react-toastify";
+// import ToastContainerWrapper from "./ToastContainerWrapper";
+
+// // Helper function to convert error objects to strings
+// function getErrorMessage(err) {
+//   if (!err) return "";
+//   if (typeof err === "string") return err;
+//   if (err.message) return err.message;
+//   if (err.error) return err.error;
+//   return JSON.stringify(err);
+// }
+
+// export default function GameRoom() {
+//   const dispatch = useDispatch();
+//   const {
+//     currentRound,
+//     jackpot,
+//     betResults = [],
+//     // aggregatedBetResults, // We'll use betResults directly
+//     loading,
+//     error,
+//   } = useSelector((state) => state.round);
+
+//   // Get the logged-in user from the auth slice
+//   const authUser = useSelector((state) => state.auth.user);
+
+//   const [timeLeft, setTimeLeft] = useState(0);
+//   const timerRef = useRef(null);
+
+//   // 1. Initialize realtime updates (Ably, sockets, etc.)
+//   useAblyGameRoom();
+
+//   // 2. (Optional) Fetch round & jackpot data on component mount
+//   // useEffect(() => {
+//   //   dispatch(fetchCurrentRound());
+//   //   dispatch(fetchJackpotPool());
+//   // }, [dispatch]);
+
+//   // 3. Set up a local countdown timer for the active round
+//   useEffect(() => {
+//     if (!currentRound || currentRound.outcome !== null) {
+//       setTimeLeft(0);
+//       if (timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//       return;
+//     }
+//     const endMs = new Date(currentRound.endTime).getTime();
+//     const updateTime = () => {
+//       const now = Date.now();
+//       const remaining = Math.max(0, Math.floor((endMs - now) / 1000));
+//       setTimeLeft(remaining);
+//       if (remaining <= 0 && timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//     };
+//     updateTime();
+//     timerRef.current = setInterval(updateTime, 1000);
+//     return () => {
+//       if (timerRef.current) clearInterval(timerRef.current);
+//     };
+//   }, [currentRound]);
+
+//   // 4. Show error toast ONLY once, then clear it in Redux
+//   const errorMsg = getErrorMessage(error);
+//   useEffect(() => {
+//     if (errorMsg) {
+//       toast.error(errorMsg);
+//       dispatch(clearError());
+//     }
+//   }, [errorMsg, dispatch]);
+
+//   // 5. Notify the signed-in user about their bet result after the round ends
+//   useEffect(() => {
+//     if (!authUser || !currentRound || currentRound.outcome === null) return;
+
+//     // Determine a unique key for the user to avoid duplicate notifications.
+//     const userIdentifier = authUser.phone || authUser._id;
+//     const localStorageKey = `notifiedBets_${userIdentifier}`;
+
+//     // Filter bets that belong to the signed-in user for the current round.
+//     const userBets = betResults.filter((bet) => {
+//       const betRound = bet.gameRound || bet.roundId;
+//       if (betRound !== currentRound._id) return false;
+//       // Check using phone or user ID
+//       if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
+//       if (!bet.phone && authUser._id) return bet.user === authUser._id;
+//       return false;
+//     });
+
+//     // Get the list of bet IDs we've already notified about.
+//     const storedNotifiedBets = JSON.parse(
+//       localStorage.getItem(localStorageKey) || "[]"
+//     );
+
+//     userBets.forEach((bet) => {
+//       // Only notify if we haven't already notified for this bet.
+//       if (!storedNotifiedBets.includes(bet.betId) && bet.result) {
+//         if (bet.result === "win") {
+//           toast.success(`Congratulations! You won Ksh${bet.amount}!`);
+//         } else if (bet.result === "loss" || bet.result === "lost") {
+//           toast.error(
+//             `Sorry, your bet of Ksh${bet.betAmount} lost Ksh${bet.amount}.`
+//           );
+//         }
+//         // Mark this bet as notified.
+//         storedNotifiedBets.push(bet.betId);
+//       }
+//     });
+
+//     localStorage.setItem(localStorageKey, JSON.stringify(storedNotifiedBets));
+//   }, [betResults, currentRound, authUser]);
+
+//   // 6. Filter bets by side (heads/tails) for the current round only.
+//   const currentRoundId = currentRound ? currentRound._id : null;
+//   const headBets =
+//     currentRoundId &&
+//     betResults.filter(
+//       (bet) =>
+//         bet.side === "heads" &&
+//         (bet.gameRound || bet.roundId) === currentRoundId
+//     );
+//   const tailBets =
+//     currentRoundId &&
+//     betResults.filter(
+//       (bet) =>
+//         bet.side === "tails" &&
+//         (bet.gameRound || bet.roundId) === currentRoundId
+//     );
+
+//   return (
+//     <div className="max-w-6xl mx-auto p-6">
+//       <h1 className="text-3xl font-extrabold text-center mb-6">
+//         Coin Flip Betting Game
+//       </h1>
+
+//       {loading && <p className="text-center text-gray-600">Loading...</p>}
+
+//       {/* Round Display */}
+//       {currentRound && currentRound.outcome === null ? (
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} (Active)
+//           </h2>
+//           <div className="flex flex-col md:flex-row md:justify-between mb-4">
+//             <p className="text-lg">
+//               <span className="font-medium">Time Left:</span> {timeLeft}s
+//             </p>
+//             <p className="text-lg">
+//               <span className="font-medium">Last Result:</span>{" "}
+//               {currentRound.lastResult || "N/A"}
+//             </p>
+//           </div>
+//           <CoinFlip round={currentRound} />
+//           {Date.now() < new Date(currentRound.countdownEndTime).getTime() ? (
+//             <BetForm roundId={currentRound._id} />
+//           ) : (
+//             <p className="text-red-600 mt-2 font-semibold">
+//               Betting is closed.
+//             </p>
+//           )}
+//         </div>
+//       ) : currentRound && currentRound.outcome ? (
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} Ended!
+//           </h2>
+//           <p className="text-lg mb-4">
+//             <span className="font-medium">Outcome:</span>{" "}
+//             {currentRound.outcome}
+//           </p>
+//           <CoinFlip round={currentRound} />
+//           <p className="mt-4 text-gray-700">
+//             Please wait for the next round to start...
+//           </p>
+//         </div>
+//       ) : (
+//         <div className="bg-gray-100 rounded-lg p-6 text-center text-gray-700 mb-6">
+//           No active round. Please wait...
+//         </div>
+//       )}
+
+//       {/* Active Bet Section for the Signed-in User */}
+//       {authUser && currentRound && currentRound.outcome === null && (
+//         <div className="bg-blue-100 rounded-lg p-4 mb-6">
+//           <h3 className="text-xl font-bold text-center">Your Active Bet</h3>
+//           {betResults.filter((bet) => {
+//             const betRound = bet.gameRound || bet.roundId;
+//             if (betRound !== currentRound._id) return false;
+//             if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
+//             if (!bet.phone && authUser._id) return bet.user === authUser._id;
+//             return false;
+//           }).length > 0 ? (
+//             betResults
+//               .filter((bet) => {
+//                 const betRound = bet.gameRound || bet.roundId;
+//                 if (betRound !== currentRound._id) return false;
+//                 if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
+//                 if (!bet.phone && authUser._id) return bet.user === authUser._id;
+//                 return false;
+//               })
+//               .map((bet, idx) => (
+//                 <div key={bet.betId || idx} className="text-center my-2">
+//                   <p className="text-lg">
+//                     <strong>Amount:</strong> Ksh {bet.betAmount}
+//                   </p>
+//                   <p className="text-lg">
+//                     <strong>Side:</strong> {bet.side}
+//                   </p>
+//                   {bet.result ? (
+//                     <p className="text-green-600 text-lg">
+//                       <strong>Result:</strong>{" "}
+//                       {bet.result === "win"
+//                         ? `Won Ksh${bet.amount}`
+//                         : `Lost Ksh${bet.amount}`}
+//                     </p>
+//                   ) : (
+//                     <p className="text-gray-600 text-lg">Bet is active</p>
+//                   )}
+//                 </div>
+//               ))
+//           ) : (
+//             <p className="text-center text-gray-600">
+//               You have not placed any bet this round.
+//             </p>
+//           )}
+//         </div>
+//       )}
+
+//       {/* Jackpot Section */}
+//       <div className="bg-yellow-100 rounded-lg p-4 mb-6 text-center">
+//         <h3 className="text-xl font-bold">
+//           Jackpot: {Number(jackpot).toFixed(2)}
+//         </h3>
+//       </div>
+
+//       {/* Side-by-side Heads/Tails Bets (filtered for the current round) */}
+//       {(headBets.length > 0 || tailBets.length > 0) && (
+//         <div className="mb-6">
+//           <h3 className="text-2xl font-semibold mb-4 text-center">
+//             Bet Updates
+//           </h3>
+//           <div className="flex flex-col md:flex-row md:space-x-6">
+//             {/* Heads Bets */}
+//             <div className="bg-white rounded-lg shadow p-4 flex-1 mb-4 md:mb-0">
+//               <h4 className="text-xl font-semibold mb-2 border-b pb-1">
+//                 Heads Bets
+//               </h4>
+//               {headBets.length > 0 ? (
+//                 <ul className="space-y-2">
+//                   {headBets.map((bet, index) => (
+//                     <li
+//                       key={bet.betId || index}
+//                       className="p-2 border rounded hover:bg-gray-50"
+//                     >
+//                       <div className="flex justify-between">
+//                         <span>
+//                           <strong>Bet #{index + 1}</strong>
+//                         </span>
+//                         <span className="text-sm text-gray-500">
+//                           {bet.user
+//                             ? `User: ${bet.user}`
+//                             : bet.phone
+//                             ? `Phone: ${bet.phone}`
+//                             : "N/A"}
+//                         </span>
+//                       </div>
+//                       <p>
+//                         <span className="font-medium">Amount:</span>{" "}
+//                         {bet.betAmount}
+//                       </p>
+//                       {bet.result ? (
+//                         <p>
+//                           <span className="font-medium">Result:</span>{" "}
+//                           {bet.result} |{" "}
+//                           {bet.result === "win"
+//                             ? `Won: ${bet.amount}`
+//                             : `Lost: ${bet.amount}`}
+//                         </p>
+//                       ) : (
+//                         <p className="text-gray-600">Placed</p>
+//                       )}
+//                     </li>
+//                   ))}
+//                 </ul>
+//               ) : (
+//                 <p className="text-gray-500">No Heads bets yet.</p>
+//               )}
+//             </div>
+
+//             {/* Tails Bets */}
+//             <div className="bg-white rounded-lg shadow p-4 flex-1">
+//               <h4 className="text-xl font-semibold mb-2 border-b pb-1">
+//                 Tails Bets
+//               </h4>
+//               {tailBets.length > 0 ? (
+//                 <ul className="space-y-2">
+//                   {tailBets.map((bet, index) => (
+//                     <li
+//                       key={bet.betId || index}
+//                       className="p-2 border rounded hover:bg-gray-50"
+//                     >
+//                       <div className="flex justify-between">
+//                         <span>
+//                           <strong>Bet #{index + 1}</strong>
+//                         </span>
+//                         <span className="text-sm text-gray-500">
+//                           {bet.user
+//                             ? `User: ${bet.user}`
+//                             : bet.phone
+//                             ? `Phone: ${bet.phone}`
+//                             : "N/A"}
+//                         </span>
+//                       </div>
+//                       <p>
+//                         <span className="font-medium">Amount:</span>{" "}
+//                         {bet.betAmount}
+//                       </p>
+//                       {bet.result ? (
+//                         <p>
+//                           <span className="font-medium">Result:</span>{" "}
+//                           {bet.result} |{" "}
+//                           {bet.result === "win"
+//                             ? `Won: ${bet.amount}`
+//                             : `Lost: ${bet.amount}`}
+//                         </p>
+//                       ) : (
+//                         <p className="text-gray-600">Placed</p>
+//                       )}
+//                     </li>
+//                   ))}
+//                 </ul>
+//               ) : (
+//                 <p className="text-gray-500">No Tails bets yet.</p>
+//               )}
+//             </div>
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Toast container */}
+//       <ToastContainerWrapper />
+//     </div>
+//   );
+// }
 
 
 
