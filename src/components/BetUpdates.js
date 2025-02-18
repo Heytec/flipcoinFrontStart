@@ -25,9 +25,9 @@ export default function BetUpdates({ headBets, tailBets }) {
                     </span>
                     <span className="text-sm text-gray-500">
                       {bet.user
-                        ? `User: ${bet.user}`
-                        : bet.phone
                         ? `Phone: ${bet.phone}`
+                        : bet.user
+                        ? `User: ${bet.user}`
                         : "N/A"}
                     </span>
                   </div>

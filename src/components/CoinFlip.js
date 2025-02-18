@@ -1,4 +1,5 @@
-// // // // // // // src/components/CoinFlip.js
+// // // // // // // // src/components/CoinFlip.js
+
 // src/components/CoinFlip.jsx
 import React, { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -113,6 +114,8 @@ export default function CoinFlip({ round }) {
     </div>
   );
 }
+
+
 
 // // src/components/CoinFlip.jsx
 
