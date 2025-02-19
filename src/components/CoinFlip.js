@@ -1,4 +1,4 @@
-// // // // // // // // // // // // // src/components/CoinFlip.js
+// // // // // // // // // // // // // // src/components/CoinFlip.js
 // src/components/CoinFlip.js
 import React, { useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
@@ -13,13 +13,14 @@ const flipVariants = {
   }),
 };
 
-export default function CoinFlip({ round, onFlipComplete }) {
+export default function CoinFlip({ round }) {
   const [isFlipping, setIsFlipping] = useState(false);
   const [outcome, setOutcome] = useState(null);
   const [flipKeyframes, setFlipKeyframes] = useState([]);
   const [displaySide, setDisplaySide] = useState("?");
-  const prevOutcomeRef = useRef(null);
   const flipTimeoutRef = useRef(null);
+  // Use a ref to track the previous round ID so that we trigger the flip for every new round
+  const prevRoundIdRef = useRef(null);
 
   // Cleanup any pending timeouts when the component unmounts
   useEffect(() => {
@@ -30,15 +31,14 @@ export default function CoinFlip({ round, onFlipComplete }) {
     };
   }, []);
 
-  // When a new round is received, start the flip if there's a new outcome
+  // When a new round is received, start the flip if there's a new round ID with an outcome
   useEffect(() => {
     if (!round) return;
-    
-    const realOutcome = round.outcome;
-    if (realOutcome && realOutcome !== prevOutcomeRef.current) {
-      setOutcome(realOutcome);
+
+    if (round.outcome && round._id !== prevRoundIdRef.current) {
+      setOutcome(round.outcome);
       setIsFlipping(true);
-      prevOutcomeRef.current = realOutcome;
+      prevRoundIdRef.current = round._id;
     }
   }, [round]);
 
@@ -49,7 +49,7 @@ export default function CoinFlip({ round, onFlipComplete }) {
         outcome === "tails" ? 180 : outcome === "house" ? 90 : 0;
       const fullFlips = Math.floor(Math.random() * 3) + 2; // between 2 and 4 flips
       const totalRotation = fullFlips * 360 + baseAngle;
-      
+
       const keyframes = [
         0,
         totalRotation * 0.25,
@@ -76,7 +76,7 @@ export default function CoinFlip({ round, onFlipComplete }) {
     };
   }, [isFlipping]);
 
-  // When the animation completes, show the final outcome and trigger the callback
+  // When the animation completes, show the final outcome (no callback needed)
   const handleAnimationComplete = () => {
     const finalDisplay =
       outcome === "heads"
@@ -89,13 +89,6 @@ export default function CoinFlip({ round, onFlipComplete }) {
     setDisplaySide(finalDisplay);
     setIsFlipping(false);
     console.log("Animation complete. Outcome:", outcome);
-    
-    // Small delay before firing the callback to ensure a smooth transition
-    flipTimeoutRef.current = setTimeout(() => {
-      if (typeof onFlipComplete === "function") {
-        onFlipComplete();
-      }
-    }, 100);
   };
 
   const finalDisplay =
@@ -129,6 +122,268 @@ export default function CoinFlip({ round, onFlipComplete }) {
     </div>
   );
 }
+
+// src/components/CoinFlip.js
+// import React, { useEffect, useState, useRef } from "react";
+// import { motion } from "framer-motion";
+
+// const flipVariants = {
+//   hidden: { opacity: 0, rotateY: "0deg" },
+//   visible: (flipKeyframes) => ({
+//     opacity: 1,
+//     // Animate through the provided keyframes (converted to "deg" strings)
+//     rotateY: flipKeyframes.map((angle) => `${angle}deg`),
+//     transition: { duration: 3, ease: "easeInOut" },
+//   }),
+// };
+
+// export default function CoinFlip({ round, onFlipComplete }) {
+//   const [isFlipping, setIsFlipping] = useState(false);
+//   const [outcome, setOutcome] = useState(null);
+//   const [flipKeyframes, setFlipKeyframes] = useState([]);
+//   const [displaySide, setDisplaySide] = useState("?");
+//   const flipTimeoutRef = useRef(null);
+//   // Use a ref to track the previous round ID so that we always trigger the flip on a new round
+//   const prevRoundIdRef = useRef(null);
+
+//   // Cleanup any pending timeouts when the component unmounts
+//   useEffect(() => {
+//     return () => {
+//       if (flipTimeoutRef.current) {
+//         clearTimeout(flipTimeoutRef.current);
+//       }
+//     };
+//   }, []);
+
+//   // When a new round is received, start the flip if there's a new round ID with an outcome
+//   useEffect(() => {
+//     if (!round) return;
+
+//     if (round.outcome && round._id !== prevRoundIdRef.current) {
+//       setOutcome(round.outcome);
+//       setIsFlipping(true);
+//       prevRoundIdRef.current = round._id;
+//     }
+//   }, [round]);
+
+//   // Compute keyframes for the coin flip animation based on the outcome
+//   useEffect(() => {
+//     if (isFlipping && outcome) {
+//       const baseAngle =
+//         outcome === "tails" ? 180 : outcome === "house" ? 90 : 0;
+//       const fullFlips = Math.floor(Math.random() * 3) + 2; // between 2 and 4 flips
+//       const totalRotation = fullFlips * 360 + baseAngle;
+      
+//       const keyframes = [
+//         0,
+//         totalRotation * 0.25,
+//         totalRotation * 0.5,
+//         totalRotation * 0.75,
+//         totalRotation - 30,
+//         totalRotation,
+//       ];
+//       setFlipKeyframes(keyframes);
+//     }
+//   }, [isFlipping, outcome]);
+
+//   // Update the displayed side at short intervals while flipping
+//   useEffect(() => {
+//     let intervalId;
+//     if (isFlipping) {
+//       intervalId = setInterval(() => {
+//         const sides = ["H", "T", "EDGE"];
+//         setDisplaySide(sides[Math.floor(Math.random() * sides.length)]);
+//       }, 100);
+//     }
+//     return () => {
+//       if (intervalId) clearInterval(intervalId);
+//     };
+//   }, [isFlipping]);
+
+//   // When the animation completes, show the final outcome and trigger the callback
+//   const handleAnimationComplete = () => {
+//     const finalDisplay =
+//       outcome === "heads"
+//         ? "H"
+//         : outcome === "tails"
+//         ? "T"
+//         : outcome === "house"
+//         ? "EDGE"
+//         : "?";
+//     setDisplaySide(finalDisplay);
+//     setIsFlipping(false);
+//     console.log("Animation complete. Outcome:", outcome);
+    
+//     // Small delay before firing the callback to ensure a smooth transition
+//     flipTimeoutRef.current = setTimeout(() => {
+//       if (typeof onFlipComplete === "function") {
+//         onFlipComplete();
+//       }
+//     }, 100);
+//   };
+
+//   const finalDisplay =
+//     outcome === "heads"
+//       ? "H"
+//       : outcome === "tails"
+//       ? "T"
+//       : outcome === "house"
+//       ? "EDGE"
+//       : "?";
+
+//   return (
+//     <div className="mt-4 flex justify-center">
+//       {isFlipping && outcome && flipKeyframes.length > 0 ? (
+//         <motion.div
+//           key="coin-flip"
+//           className="w-24 h-24 bg-yellow-300 rounded-full flex items-center justify-center text-2xl font-bold"
+//           variants={flipVariants}
+//           initial="hidden"
+//           animate="visible"
+//           custom={flipKeyframes}
+//           onAnimationComplete={handleAnimationComplete}
+//         >
+//           {displaySide}
+//         </motion.div>
+//       ) : (
+//         <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-2xl font-bold">
+//           {finalDisplay}
+//         </div>
+//       )}
+//     </div>
+//   );
+// }
+
+// // src/components/CoinFlip.js
+// import React, { useEffect, useState, useRef } from "react";
+// import { motion } from "framer-motion";
+
+// const flipVariants = {
+//   hidden: { opacity: 0, rotateY: "0deg" },
+//   visible: (flipKeyframes) => ({
+//     opacity: 1,
+//     // Animate through the provided keyframes (converted to "deg" strings)
+//     rotateY: flipKeyframes.map((angle) => `${angle}deg`),
+//     transition: { duration: 3, ease: "easeInOut" },
+//   }),
+// };
+
+// export default function CoinFlip({ round, onFlipComplete }) {
+//   const [isFlipping, setIsFlipping] = useState(false);
+//   const [outcome, setOutcome] = useState(null);
+//   const [flipKeyframes, setFlipKeyframes] = useState([]);
+//   const [displaySide, setDisplaySide] = useState("?");
+//   const prevOutcomeRef = useRef(null);
+//   const flipTimeoutRef = useRef(null);
+
+//   // Cleanup any pending timeouts when the component unmounts
+//   useEffect(() => {
+//     return () => {
+//       if (flipTimeoutRef.current) {
+//         clearTimeout(flipTimeoutRef.current);
+//       }
+//     };
+//   }, []);
+
+//   // When a new round is received, start the flip if there's a new outcome
+//   useEffect(() => {
+//     if (!round) return;
+    
+//     const realOutcome = round.outcome;
+//     if (realOutcome && realOutcome !== prevOutcomeRef.current) {
+//       setOutcome(realOutcome);
+//       setIsFlipping(true);
+//       prevOutcomeRef.current = realOutcome;
+//     }
+//   }, [round]);
+
+//   // Compute keyframes for the coin flip animation based on the outcome
+//   useEffect(() => {
+//     if (isFlipping && outcome) {
+//       const baseAngle =
+//         outcome === "tails" ? 180 : outcome === "house" ? 90 : 0;
+//       const fullFlips = Math.floor(Math.random() * 3) + 2; // between 2 and 4 flips
+//       const totalRotation = fullFlips * 360 + baseAngle;
+      
+//       const keyframes = [
+//         0,
+//         totalRotation * 0.25,
+//         totalRotation * 0.5,
+//         totalRotation * 0.75,
+//         totalRotation - 30,
+//         totalRotation,
+//       ];
+//       setFlipKeyframes(keyframes);
+//     }
+//   }, [isFlipping, outcome]);
+
+//   // Update the displayed side at short intervals while flipping
+//   useEffect(() => {
+//     let intervalId;
+//     if (isFlipping) {
+//       intervalId = setInterval(() => {
+//         const sides = ["H", "T", "EDGE"];
+//         setDisplaySide(sides[Math.floor(Math.random() * sides.length)]);
+//       }, 100);
+//     }
+//     return () => {
+//       if (intervalId) clearInterval(intervalId);
+//     };
+//   }, [isFlipping]);
+
+//   // When the animation completes, show the final outcome and trigger the callback
+//   const handleAnimationComplete = () => {
+//     const finalDisplay =
+//       outcome === "heads"
+//         ? "H"
+//         : outcome === "tails"
+//         ? "T"
+//         : outcome === "house"
+//         ? "EDGE"
+//         : "?";
+//     setDisplaySide(finalDisplay);
+//     setIsFlipping(false);
+//     console.log("Animation complete. Outcome:", outcome);
+    
+//     // Small delay before firing the callback to ensure a smooth transition
+//     flipTimeoutRef.current = setTimeout(() => {
+//       if (typeof onFlipComplete === "function") {
+//         onFlipComplete();
+//       }
+//     }, 100);
+//   };
+
+//   const finalDisplay =
+//     outcome === "heads"
+//       ? "H"
+//       : outcome === "tails"
+//       ? "T"
+//       : outcome === "house"
+//       ? "EDGE"
+//       : "?";
+
+//   return (
+//     <div className="mt-4 flex justify-center">
+//       {isFlipping && outcome && flipKeyframes.length > 0 ? (
+//         <motion.div
+//           key="coin-flip"
+//           className="w-24 h-24 bg-yellow-300 rounded-full flex items-center justify-center text-2xl font-bold"
+//           variants={flipVariants}
+//           initial="hidden"
+//           animate="visible"
+//           custom={flipKeyframes}
+//           onAnimationComplete={handleAnimationComplete}
+//         >
+//           {displaySide}
+//         </motion.div>
+//       ) : (
+//         <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-2xl font-bold">
+//           {finalDisplay}
+//         </div>
+//       )}
+//     </div>
+//   );
+// }
 
 
 // // src/components/CoinFlip.js

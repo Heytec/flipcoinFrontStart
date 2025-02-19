@@ -1,31 +1,84 @@
-// // src/components/GameRoom.js
 // src/components/GameRoom.js
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { clearError } from "../features/roundSlice";
+import { clearError, fetchCurrentRound } from "../features/roundSlice";
+import { FiClock } from "react-icons/fi";
 import useAblyGameRoom from "../hooks/useAblyGameRoom";
 import BetForm from "./BetForm";
 import CoinFlip from "./CoinFlip";
-import UserBets from "./UserBets"; // Bet History Component
-import TopWinsBets from "./TopWinsBets"; // Top Wins Component
-import ActiveBet from "./ActiveBet"; // Active Bet Component
-import BetUpdates from "./BetUpdates"; // Bet Updates Component
-import RoundHistory from "./RoundHistory"; // Round History Component
+import UserBets from "./UserBets";
+import TopWinsBets from "./TopWinsBets";
+import ActiveBet from "./ActiveBet";
+import BetUpdates from "./BetUpdates";
+import RoundHistory from "./RoundHistory";
 import { toast } from "react-toastify";
 import ToastContainerWrapper from "./ToastContainerWrapper";
+import NoActiveRound from "./NoActiveRound";
+import LoadingSpinner from "./LoadingSpinner";
+import GameRoomTabs from "./GameRoomTabs";
 
-// Helper function to convert error objects to strings
-function getErrorMessage(err) {
+// Helper function to format result message
+export const formatResultMessage = (round, userBets, betAmount) => {
+  console.log("Formatting result message:", {
+    round,
+    userBets,
+    betAmount,
+    hasOutcome: !!round?.outcome,
+  });
+
+  if (!round || !round.outcome) return null;
+
+  const totalBetAmount = Number(betAmount) || 0;
+  const outcome = round.outcome.charAt(0).toUpperCase() + round.outcome.slice(1);
+
+  if (!userBets || userBets.length === 0) {
+    console.log("No user bets found");
+    return {
+      message: `Round ${round.roundNumber}: ${outcome} wins!`,
+      type: "info",
+    };
+  }
+
+  const winningBets = userBets.filter((bet) => bet.side === round.outcome);
+  const userWon = winningBets.length > 0;
+  const totalWinAmount = winningBets.reduce(
+    (sum, bet) => sum + (Number(bet.potentialWin) || 0),
+    0
+  );
+
+  console.log("Result calculation:", {
+    userWon,
+    winningBets,
+    totalWinAmount,
+  });
+
+  if (userWon) {
+    return {
+      message: `🎉 Congratulations! You won $${totalWinAmount.toFixed(
+        2
+      )} with ${outcome}!`,
+      type: "success",
+    };
+  } else {
+    return {
+      message: `💫 Better luck next time! You lost $${totalBetAmount.toFixed(
+        2
+      )}. ${outcome} wins!`,
+      type: "error",
+    };
+  }
+};
+
+export const getErrorMessage = (err) => {
   if (!err) return "";
   if (typeof err === "string") return err;
   if (err.message) return err.message;
   if (err.error)
-    return typeof err.error === "string"
-      ? err.error
-      : JSON.stringify(err.error);
+    return typeof err.error === "string" ? err.error : JSON.stringify(err.error);
   return JSON.stringify(err);
-}
+};
 
+// Main GameRoom Component
 export default function GameRoom() {
   const dispatch = useDispatch();
 
@@ -34,33 +87,89 @@ export default function GameRoom() {
     useSelector((state) => state.round);
   const authUser = useSelector((state) => state.auth.user);
 
+  // Component state
   const [timeLeft, setTimeLeft] = useState(0);
-  const timerRef = useRef(null);
-
-  // Track the active tab for bet displays
   const [activeTab, setActiveTab] = useState("activeBet");
+  const [betResult, setBetResult] = useState(null);
+  const [showBetResult, setShowBetResult] = useState(false);
 
-  // Track when the coin flip animation has completed
-  const [flipComplete, setFlipComplete] = useState(false);
+  // Refs
+  const timerRef = useRef(null);
+  const autoRefreshRef = useRef(null);
+  const displayedOutcomeForRound = useRef(null);
 
-  // Local state to store the last result (updated after coin flip)
-  const [lastResult, setLastResult] = useState("N/A");
-
-  // Initialize realtime updates
   useAblyGameRoom();
 
-  // Reset coin flip status whenever we get a new round
-  useEffect(() => {
-    if (currentRound) {
-      console.log("New round received; resetting flipComplete");
-      setFlipComplete(false);
-    }
-  }, [currentRound]);
+  // Memoized values
+  const errorMsg = getErrorMessage(error);
+  const noActiveRoundError = useMemo(() => {
+    if (loading) return false;
+    return errorMsg.toLowerCase().includes("no active round") || !currentRound;
+  }, [loading, currentRound, errorMsg]);
 
-  /**
-   * Countdown Timer for Active Round:
-   * - Uses currentRound.endTime for the time-left display.
-   */
+  // Memoized user active bets
+  const userActiveBets = useMemo(() => {
+    if (!authUser || !currentRound) return [];
+    return betResults.filter((bet) => {
+      const isCurrentRound =
+        bet.gameRound === currentRound._id || bet.roundId === currentRound._id;
+      const isUserBet =
+        (bet.phone && authUser.phone && bet.phone === authUser.phone) ||
+        (!bet.phone && authUser._id && bet.user === authUser._id);
+
+      console.log("Bet filtering:", {
+        bet,
+        isCurrentRound,
+        isUserBet,
+        roundMatch: currentRound._id,
+      });
+
+      return isCurrentRound && isUserBet;
+    });
+  }, [betResults, currentRound, authUser]);
+
+  // // Effects
+  // useEffect(() => {
+  //   if (currentRound && !currentRound.outcome) {
+  //     toast.info(`🎲 New Round #${currentRound.roundNumber} started!`, {
+  //       position: "top-right",
+  //       autoClose: 1000,
+  //     });
+  //     setBetResult(null);
+  //     setShowBetResult(false);
+  //   }
+  // }, [currentRound?.roundNumber]);
+
+  // useEffect(() => {
+  //   if (currentRound && timeLeft === 0 && !currentRound.outcome) {
+  //     toast.warning("⏰ Betting is now closed!", {
+  //       position: "top-center",
+  //       autoClose: 1000,
+  //     });
+  //   }
+  // }, [timeLeft, currentRound]);
+
+  // Auto-refresh for no active round
+  useEffect(() => {
+    if (noActiveRoundError && !autoRefreshRef.current) {
+      autoRefreshRef.current = setInterval(async () => {
+        try {
+          await dispatch(fetchCurrentRound());
+        } catch (error) {
+          console.error("Auto-refresh failed:", error);
+        }
+      }, 30000);
+    }
+
+    return () => {
+      if (autoRefreshRef.current) {
+        clearInterval(autoRefreshRef.current);
+        autoRefreshRef.current = null;
+      }
+    };
+  }, [noActiveRoundError, dispatch]);
+
+  // Countdown timer
   useEffect(() => {
     if (!currentRound || currentRound.outcome !== null) {
       setTimeLeft(0);
@@ -78,14 +187,13 @@ export default function GameRoom() {
       const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
       setTimeLeft(remaining);
 
-      // If time is up, clear the interval
       if (remaining <= 0 && timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
     };
 
-    updateTime(); // set initial
+    updateTime();
     timerRef.current = setInterval(updateTime, 1000);
 
     return () => {
@@ -93,104 +201,129 @@ export default function GameRoom() {
     };
   }, [currentRound]);
 
-  // Extract and display errors from Redux state
-  const errorMsg = getErrorMessage(error);
-
+  // Error handling
   useEffect(() => {
     if (errorMsg) {
-      // Check if it's a concurrency / duplicate key error (common with many simultaneous bets)
       if (errorMsg.includes("E11000")) {
-        toast.error("Multiple simultaneous bets encountered. Please try again!");
-      } else {
-        // Otherwise, just display the error normally
+        toast.error("Multiple simultaneous bets detected. Please try again!");
+      } else if (!errorMsg.toLowerCase().includes("no active round")) {
         toast.error(errorMsg);
       }
-
-      // Clear the error from Redux so we don't keep re-displaying it
       dispatch(clearError());
     }
   }, [errorMsg, dispatch]);
 
-  /**
-   * Notify user about bet result after round ends
-   * - Relies on betResults updating in Redux
-   */
+  // Toast outcome once the round ends (only once per round)
   useEffect(() => {
-    if (!authUser || !currentRound || currentRound.outcome === null) return;
+    if (
+      currentRound &&
+      currentRound.outcome &&
+      displayedOutcomeForRound.current !== currentRound._id
+    ) {
+      displayedOutcomeForRound.current = currentRound._id;
+      // Get all user bets for this round
+      const roundBets = betResults.filter((bet) => {
+        const isCurrentRound =
+          bet.gameRound === currentRound._id || bet.roundId === currentRound._id;
+        const isUserBet =
+          (bet.phone && authUser.phone && bet.phone === authUser.phone) ||
+          (!bet.phone && authUser._id && bet.user === authUser._id);
+        return isCurrentRound && isUserBet;
+      });
 
-    const userIdentifier = authUser.phone || authUser._id;
-    if (!userIdentifier) return;
+      // Calculate total bet amount
+      const totalBetAmount = roundBets.reduce(
+        (sum, bet) => sum + (Number(bet.amount) || 0),
+        0
+      );
 
-    const localStorageKey = `notifiedBets_${userIdentifier}`;
-    const userBets = betResults.filter((bet) => {
-      const betRound = bet.gameRound || bet.roundId;
-      if (betRound !== currentRound._id) return false;
+      console.log("Bet calculation:", {
+        roundBets,
+        totalBetAmount,
+      });
 
-      // Compare phone if present, else compare user ID
-      if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
-      if (!bet.phone && authUser._id) return bet.user === authUser._id;
-      return false;
-    });
+      // Format and show result
+      const result = formatResultMessage(currentRound, roundBets, totalBetAmount);
 
-    let storedNotifiedBets = [];
-    try {
-      storedNotifiedBets =
-        JSON.parse(localStorage.getItem(localStorageKey)) || [];
-    } catch (err) {
-      console.error("Error parsing localStorage for notified bets:", err);
-    }
+      if (result) {
+        setBetResult(result);
+        setShowBetResult(true);
 
-    userBets.forEach((bet) => {
-      if (!bet.betId) return;
-      if (!storedNotifiedBets.includes(bet.betId) && bet.result) {
-        if (bet.result === "win") {
-          toast.success(`Congratulations! You won Ksh${bet.amount}!`);
-        } else if (bet.result === "loss" || bet.result === "lost") {
-          toast.error(
-            `Sorry, your bet of Ksh${bet.betAmount} lost Ksh${bet.amount}.`
-          );
+        const toastConfig = {
+          position: "top-center",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+        };
+
+        switch (result.type) {
+          case "success":
+            toast.success(result.message, {
+              ...toastConfig,
+              style: {
+                background: "#4CAF50",
+                color: "white",
+                fontSize: "16px",
+                fontWeight: "bold",
+              },
+            });
+            break;
+          case "error":
+            toast.error(result.message, {
+              ...toastConfig,
+              style: { fontSize: "16px" },
+            });
+            break;
+          default:
+            toast.info(result.message, toastConfig);
         }
-        storedNotifiedBets.push(bet.betId);
       }
+    }
+  }, [currentRound, betResults, authUser]);
+
+  // Handlers
+  const handleManualRefresh = async () => {
+    try {
+      await dispatch(fetchCurrentRound());
+      toast.success("Game status refreshed");
+    } catch (error) {
+      toast.error("Failed to refresh game status");
+    }
+  };
+
+  const onBetSuccess = (betAmount, side) => {
+    toast.success(`✅ Bet placed: $${betAmount} on ${side}`, {
+      position: "bottom-right",
+      autoClose: 3000,
     });
+  };
 
-    localStorage.setItem(localStorageKey, JSON.stringify(storedNotifiedBets));
-  }, [betResults, currentRound, authUser]);
+  const onBetError = (error) => {
+    toast.error(`❌ ${error}`, {
+      position: "bottom-right",
+      autoClose: 4000,
+    });
+  };
 
-  // Filter bets by side for the current round
-  const currentRoundId = currentRound ? currentRound._id : null;
+  // Filter bets for display purposes
+  const currentRoundId = currentRound?._id;
   const headBets = currentRoundId
     ? betResults.filter(
         (bet) =>
           bet.side === "heads" &&
-          (bet.gameRound || bet.roundId) === currentRoundId
+          (bet.gameRound === currentRoundId || bet.roundId === currentRoundId)
       )
     : [];
   const tailBets = currentRoundId
     ? betResults.filter(
         (bet) =>
           bet.side === "tails" &&
-          (bet.gameRound || bet.roundId) === currentRoundId
+          (bet.gameRound === currentRoundId || bet.roundId === currentRoundId)
       )
     : [];
-
-  // Filter the signed-in user's active bets
-  const userActiveBets =
-    authUser && currentRound && currentRound.outcome === null
-      ? betResults.filter((bet) => {
-          const betRound = bet.gameRound || bet.roundId;
-          if (betRound !== currentRound._id) return false;
-
-          if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
-          if (!bet.phone && authUser._id) return bet.user === authUser._id;
-          return false;
-        })
-      : [];
-
-  // For "No Active Round" checks
-  const noActiveRoundError =
-    errorMsg.toLowerCase().includes("no active round") ||
-    (!loading && !currentRound);
 
   return (
     <div className="max-w-6xl mx-auto p-6">
@@ -198,19 +331,11 @@ export default function GameRoom() {
         Coin Flip Betting Game
       </h1>
 
-      {loading && <p className="text-center text-gray-600">Loading...</p>}
+      {loading && <LoadingSpinner />}
 
-      {/* If the server says there's no active round, or if currentRound is null */}
       {noActiveRoundError ? (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center text-red-700 mb-6">
-          <p className="text-xl font-semibold">No Active Round Available</p>
-          <p className="mt-2">
-            Betting is currently unavailable because there is no active round.
-            Please check back later or refresh the page.
-          </p>
-        </div>
+        <NoActiveRound onRefresh={handleManualRefresh} isLoading={loading} />
       ) : currentRound && currentRound.outcome === null ? (
-        // Active round
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <h2 className="text-2xl font-semibold mb-2">
             Round #{currentRound.roundNumber} (Active)
@@ -221,9 +346,12 @@ export default function GameRoom() {
             </p>
           </div>
           <CoinFlip round={currentRound} />
-          {/* Only allow bets if current time < countdownEndTime */}
           {Date.now() < new Date(currentRound.countdownEndTime).getTime() ? (
-            <BetForm roundId={currentRound._id} />
+            <BetForm
+              roundId={currentRound._id}
+              onBetSuccess={onBetSuccess}
+              onBetError={onBetError}
+            />
           ) : (
             <p className="text-red-600 mt-2 font-semibold">
               Betting is closed.
@@ -231,28 +359,12 @@ export default function GameRoom() {
           )}
         </div>
       ) : currentRound && currentRound.outcome ? (
-        // Ended round
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <h2 className="text-2xl font-semibold mb-2">
             Round #{currentRound.roundNumber} Ended!
           </h2>
-          {flipComplete && (
-            <p className="text-lg mb-4">
-              <span className="font-medium">Outcome:</span>{" "}
-              {currentRound.outcome}
-            </p>
-          )}
-          <CoinFlip
-            round={currentRound}
-            onFlipComplete={() => {
-              console.log("Flip complete callback triggered");
-              setLastResult(currentRound.outcome);
-              setFlipComplete(true);
-              toast.info(
-                `Round ${currentRound.roundNumber} ended with outcome: ${currentRound.outcome}`
-              );
-            }}
-          />
+          {/* The outcome will be displayed via a toast; no onFlipComplete callback is used */}
+          <CoinFlip round={currentRound} />
           <p className="mt-4 text-gray-700">
             Please wait for the next round to start...
           </p>
@@ -271,52 +383,19 @@ export default function GameRoom() {
       <RoundHistory />
 
       {/* Tabbed Navigation */}
-      <div className="mt-8">
-        <div className="flex justify-center mb-4 space-x-4">
-          <button
-            onClick={() => setActiveTab("activeBet")}
-            className={`px-4 py-2 border-b-2 ${
-              activeTab === "activeBet"
-                ? "border-blue-500 text-blue-500"
-                : "border-transparent text-gray-500"
-            }`}
-          >
-            Your Active Bet
-          </button>
-          <button
-            onClick={() => setActiveTab("betHistory")}
-            className={`px-4 py-2 border-b-2 ${
-              activeTab === "betHistory"
-                ? "border-blue-500 text-blue-500"
-                : "border-transparent text-gray-500"
-            }`}
-          >
-            Your Bet History
-          </button>
-          <button
-            onClick={() => setActiveTab("topWins")}
-            className={`px-4 py-2 border-b-2 ${
-              activeTab === "topWins"
-                ? "border-blue-500 text-blue-500"
-                : "border-transparent text-gray-500"
-            }`}
-          >
-            Top 10 Wins
-          </button>
-        </div>
-        <div>
-          {activeTab === "activeBet" && <ActiveBet userActiveBets={userActiveBets} />}
-          {activeTab === "betHistory" && (
-            <div className="bg-green-100 rounded-lg p-4">
-              <UserBets />
-            </div>
-          )}
-          {activeTab === "topWins" && (
-            <div className="bg-purple-100 rounded-lg p-4">
-              <TopWinsBets />
-            </div>
-          )}
-        </div>
+      <GameRoomTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+      <div>
+        {activeTab === "activeBet" && <ActiveBet userActiveBets={userActiveBets} />}
+        {activeTab === "betHistory" && (
+          <div className="bg-green-100 rounded-lg p-4">
+            <UserBets />
+          </div>
+        )}
+        {activeTab === "topWins" && (
+          <div className="bg-purple-100 rounded-lg p-4">
+            <TopWinsBets />
+          </div>
+        )}
       </div>
 
       {/* Toast Notifications */}
@@ -324,6 +403,3045 @@ export default function GameRoom() {
     </div>
   );
 }
+
+// // src/components/GameRoom.js
+// import React, { useEffect, useState, useRef, useMemo } from "react";
+// import { useDispatch, useSelector } from "react-redux";
+// import { clearError, fetchCurrentRound } from "../features/roundSlice";
+// import { FiClock } from "react-icons/fi";
+// import useAblyGameRoom from "../hooks/useAblyGameRoom";
+// import BetForm from "./BetForm";
+// import CoinFlip from "./CoinFlip";
+// import UserBets from "./UserBets";
+// import TopWinsBets from "./TopWinsBets";
+// import ActiveBet from "./ActiveBet";
+// import BetUpdates from "./BetUpdates";
+// import RoundHistory from "./RoundHistory";
+// import { toast } from "react-toastify";
+// import ToastContainerWrapper from "./ToastContainerWrapper";
+// import NoActiveRound from "./NoActiveRound";
+// import LoadingSpinner from "./LoadingSpinner";
+// import GameRoomTabs from "./GameRoomTabs";
+
+// // Helper function to format result message
+// export const formatResultMessage = (round, userBets, betAmount) => {
+//   console.log('Formatting result message:', {
+//     round,
+//     userBets,
+//     betAmount,
+//     hasOutcome: !!round?.outcome
+//   });
+
+//   if (!round || !round.outcome) return null;
+  
+//   const totalBetAmount = Number(betAmount) || 0;
+//   const outcome = round.outcome.charAt(0).toUpperCase() + round.outcome.slice(1);
+  
+//   if (!userBets || userBets.length === 0) {
+//     console.log('No user bets found');
+//     return {
+//       message: `Round ${round.roundNumber}: ${outcome} wins!`,
+//       type: 'info'
+//     };
+//   }
+
+//   const winningBets = userBets.filter(bet => bet.side === round.outcome);
+//   const userWon = winningBets.length > 0;
+//   const totalWinAmount = winningBets.reduce((sum, bet) => sum + (Number(bet.potentialWin) || 0), 0);
+
+//   console.log('Result calculation:', {
+//     userWon,
+//     winningBets,
+//     totalWinAmount
+//   });
+
+//   if (userWon) {
+//     return {
+//       message: `🎉 Congratulations! You won $${totalWinAmount.toFixed(2)} with ${outcome}!`,
+//       type: 'success'
+//     };
+//   } else {
+//     return {
+//       message: `💫 Better luck next time! You lost $${totalBetAmount.toFixed(2)}. ${outcome} wins!`,
+//       type: 'error'
+//     };
+//   }
+// };
+
+// export const getErrorMessage = (err) => {
+//   if (!err) return "";
+//   if (typeof err === "string") return err;
+//   if (err.message) return err.message;
+//   if (err.error)
+//     return typeof err.error === "string" ? err.error : JSON.stringify(err.error);
+//   return JSON.stringify(err);
+// };
+
+// // Main GameRoom Component
+// export default function GameRoom() {
+//   const dispatch = useDispatch();
+
+//   // Redux state
+//   const { currentRound, jackpot, betResults = [], loading, error } =
+//     useSelector((state) => state.round);
+//   const authUser = useSelector((state) => state.auth.user);
+
+//   // Component state
+//   const [timeLeft, setTimeLeft] = useState(0);
+//   const [activeTab, setActiveTab] = useState("activeBet");
+//   const [flipComplete, setFlipComplete] = useState(false);
+//   const [isRefreshing, setIsRefreshing] = useState(false);
+//   const [betResult, setBetResult] = useState(null);
+//   const [showBetResult, setShowBetResult] = useState(false);
+
+//   // Refs
+//   const timerRef = useRef(null);
+//   const autoRefreshRef = useRef(null);
+
+//   useAblyGameRoom();
+
+//   // Memoized values
+//   const errorMsg = getErrorMessage(error);
+//   const noActiveRoundError = useMemo(() => {
+//     if (loading) return false;
+//     return errorMsg.toLowerCase().includes("no active round") || !currentRound;
+//   }, [loading, currentRound, errorMsg]);
+
+//   // Memoized user active bets
+//   const userActiveBets = useMemo(() => {
+//     if (!authUser || !currentRound) return [];
+    
+//     return betResults.filter((bet) => {
+//       const isCurrentRound = bet.gameRound === currentRound._id || bet.roundId === currentRound._id;
+//       const isUserBet = (bet.phone && authUser.phone && bet.phone === authUser.phone) || 
+//                        (!bet.phone && authUser._id && bet.user === authUser._id);
+      
+//       console.log('Bet filtering:', {
+//         bet,
+//         isCurrentRound,
+//         isUserBet,
+//         roundMatch: currentRound._id
+//       });
+      
+//       return isCurrentRound && isUserBet;
+//     });
+//   }, [betResults, currentRound, authUser]);
+
+//   // Effects
+//   useEffect(() => {
+//     if (currentRound && !currentRound.outcome) {
+//       toast.info(`🎲 New Round #${currentRound.roundNumber} started!`, {
+//         position: "top-right",
+//         autoClose: 3000
+//       });
+//       setBetResult(null);
+//       setShowBetResult(false);
+//     }
+//   }, [currentRound?.roundNumber]);
+
+//   useEffect(() => {
+//     if (currentRound && timeLeft === 0 && !currentRound.outcome) {
+//       toast.warning('⏰ Betting is now closed!', {
+//         position: "top-center",
+//         autoClose: 3000
+//       });
+//     }
+//   }, [timeLeft, currentRound]);
+
+//   // Auto-refresh for no active round
+//   useEffect(() => {
+//     if (noActiveRoundError && !autoRefreshRef.current) {
+//       autoRefreshRef.current = setInterval(async () => {
+//         try {
+//           await dispatch(fetchCurrentRound());
+//         } catch (error) {
+//           console.error("Auto-refresh failed:", error);
+//         }
+//       }, 30000);
+//     }
+
+//     return () => {
+//       if (autoRefreshRef.current) {
+//         clearInterval(autoRefreshRef.current);
+//         autoRefreshRef.current = null;
+//       }
+//     };
+//   }, [noActiveRoundError, dispatch]);
+
+//   // Reset flip status on new round
+//   useEffect(() => {
+//     if (currentRound) {
+//       setFlipComplete(false);
+//     }
+//   }, [currentRound]);
+
+//   // Countdown timer
+//   useEffect(() => {
+//     if (!currentRound || currentRound.outcome !== null) {
+//       setTimeLeft(0);
+//       if (timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//       return;
+//     }
+
+//     const endTime = new Date(currentRound.endTime).getTime();
+
+//     const updateTime = () => {
+//       const now = Date.now();
+//       const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
+//       setTimeLeft(remaining);
+
+//       if (remaining <= 0 && timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//     };
+
+//     updateTime();
+//     timerRef.current = setInterval(updateTime, 1000);
+
+//     return () => {
+//       if (timerRef.current) clearInterval(timerRef.current);
+//     };
+//   }, [currentRound]);
+
+//   // Error handling
+//   useEffect(() => {
+//     if (errorMsg) {
+//       if (errorMsg.includes("E11000")) {
+//         toast.error("Multiple simultaneous bets detected. Please try again!");
+//       } else if (!errorMsg.toLowerCase().includes("no active round")) {
+//         toast.error(errorMsg);
+//       }
+//       dispatch(clearError());
+//     }
+//   }, [errorMsg, dispatch]);
+
+//   // Handlers
+//   const handleManualRefresh = async () => {
+//     setIsRefreshing(true);
+//     try {
+//       await dispatch(fetchCurrentRound());
+//       toast.success("Game status refreshed");
+//     } catch (error) {
+//       toast.error("Failed to refresh game status");
+//     } finally {
+//       setIsRefreshing(false);
+//     }
+//   };
+
+//   const onBetSuccess = (betAmount, side) => {
+//     toast.success(`✅ Bet placed: $${betAmount} on ${side}`, {
+//       position: "bottom-right",
+//       autoClose: 3000
+//     });
+//   };
+
+//   const onBetError = (error) => {
+//     toast.error(`❌ ${error}`, {
+//       position: "bottom-right",
+//       autoClose: 4000
+//     });
+//   };
+
+//   // Filter bets
+//   const currentRoundId = currentRound?._id;
+//   const headBets = currentRoundId
+//     ? betResults.filter(bet => 
+//         bet.side === "heads" && 
+//         (bet.gameRound === currentRoundId || bet.roundId === currentRoundId)
+//       )
+//     : [];
+//   const tailBets = currentRoundId
+//     ? betResults.filter(bet => 
+//         bet.side === "tails" && 
+//         (bet.gameRound === currentRoundId || bet.roundId === currentRoundId)
+//       )
+//     : [];
+
+//   return (
+//     <div className="max-w-6xl mx-auto p-6">
+//       <h1 className="text-3xl font-extrabold text-center mb-6">
+//         Coin Flip Betting Game
+//       </h1>
+
+//       {loading && !isRefreshing && <LoadingSpinner />}
+
+//       {noActiveRoundError ? (
+//         <NoActiveRound
+//           onRefresh={handleManualRefresh}
+//           isLoading={loading || isRefreshing}
+//         />
+//       ) : currentRound && currentRound.outcome === null ? (
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} (Active)
+//           </h2>
+//           <div className="flex flex-col md:flex-row md:justify-between mb-4">
+//             <p className="text-lg">
+//               <span className="font-medium">Time Left:</span> {timeLeft}s
+//             </p>
+//           </div>
+//           <CoinFlip round={currentRound} />
+//           {Date.now() < new Date(currentRound.countdownEndTime).getTime() ? (
+//             <BetForm 
+//               roundId={currentRound._id} 
+//               onBetSuccess={onBetSuccess}
+//               onBetError={onBetError}
+//             />
+//           ) : (
+//             <p className="text-red-600 mt-2 font-semibold">
+//               Betting is closed.
+//             </p>
+//           )}
+//         </div>
+//       ) : currentRound && currentRound.outcome ? (
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} Ended!
+//           </h2>
+//           {flipComplete && (
+//             <p className="text-lg mb-4">
+//               <span className="font-medium">Outcome:</span>{" "}
+//               {currentRound.outcome}
+//             </p>
+//           )}
+//           <CoinFlip
+//             round={currentRound}
+//             onFlipComplete={() => {
+//               setFlipComplete(true);
+              
+//               console.log('Round completed:', {
+//                 currentRound,
+//                 userActiveBets,
+//                 authUser,
+//                 betResults
+//               });
+
+//               // Get all user bets for this round
+//               const roundBets = betResults.filter(bet => {
+//                 const isCurrentRound = bet.gameRound === currentRound._id || 
+//                                      bet.roundId === currentRound._id;
+//                 const isUserBet = (bet.phone && authUser.phone && bet.phone === authUser.phone) || 
+//                                  (!bet.phone && authUser._id && bet.user === authUser._id);
+//                 return isCurrentRound && isUserBet;
+//               });
+
+//               // Calculate total bet amount
+//               const totalBetAmount = roundBets.reduce(
+//                 (sum, bet) => sum + (Number(bet.amount) || 0),
+//                 0
+//               );
+
+//               console.log('Bet calculation:', {
+//                 roundBets,
+//                 totalBetAmount
+//               });
+
+//               // Format and show result
+//               const result = formatResultMessage(
+//                 currentRound,
+//                 roundBets,
+//                 totalBetAmount
+//               );
+
+//               if (result) {
+//                 setBetResult(result);
+//                 setShowBetResult(true);
+
+//                 const toastConfig = {
+//                   position: "top-center",
+//                   autoClose: 5000,
+//                   hideProgressBar: false,
+//                   closeOnClick: true,
+//                   pauseOnHover: true,
+//                   draggable: true,
+//                   progress: undefined
+//                 };
+
+//                 switch (result.type) {
+//                   case 'success':
+//                     toast.success(result.message, {
+//                       ...toastConfig,
+//                       style: {
+//                         background: "#4CAF50",
+//                         color: "white",
+//                         fontSize: "16px",
+//                         fontWeight: "bold"
+//                       }
+//                     });
+//                     break;
+//                   case 'error':
+//                     toast.error(result.message, {
+//                       ...toastConfig,
+//                       style: {
+//                         fontSize: "16px"
+//                       }
+//                     });
+//                     break;
+//                   default:
+//                     toast.info(result.message, toastConfig);
+//                 }
+//               }
+//             }}
+//           />
+
+//           {showBetResult && betResult && (
+//             <div className={`mt-4 p-4 rounded-lg text-center ${
+//               betResult.type === 'success' 
+//                 ? 'bg-green-100 text-green-800'
+//                 : betResult.type === 'error'
+//                 ? 'bg-red-100 text-red-800'
+//                 : 'bg-blue-100 text-blue-800'
+//             }`}>
+//               <p className="text-lg font-semibold">{betResult.message}</p>
+//             </div>
+//           )}
+
+//           <p className="mt-4 text-gray-700">
+//             Please wait for the next round to start...
+//           </p>
+//         </div>
+//       ) : null}
+
+//       {/* Jackpot Section */}
+//       <div className="bg-yellow-100 rounded-lg p-4 mb-6 text-center">
+//         <h3 className="text-xl font-bold">
+//           Jackpot: {Number(jackpot || 0).toFixed(2)}
+//         </h3>
+//       </div>
+
+//       {/* Additional Components */}
+//       <BetUpdates headBets={headBets} tailBets={tailBets} />
+//       <RoundHistory />
+
+//       {/* Tabbed Navigation */}
+//       <GameRoomTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+//       <div>
+//         {activeTab === "activeBet" && <ActiveBet userActiveBets={userActiveBets} />}
+//         {activeTab === "betHistory" && (
+//           <div className="bg-green-100 rounded-lg p-4">
+//             <UserBets />
+//           </div>
+//         )}
+//         {activeTab === "topWins" && (
+//           <div className="bg-purple-100 rounded-lg p-4">
+//             <TopWinsBets />
+//           </div>
+//         )}
+//       </div>
+
+//       {/* Toast Notifications */}
+//       <ToastContainerWrapper />
+//     </div>
+//   );
+// }
+// // src/components/GameRoom.js
+// import React, { useEffect, useState, useRef, useMemo } from "react";
+// import { useDispatch, useSelector } from "react-redux";
+// import { clearError, fetchCurrentRound } from "../features/roundSlice";
+// import { FiClock } from "react-icons/fi";
+// import useAblyGameRoom from "../hooks/useAblyGameRoom";
+// import BetForm from "./BetForm";
+// import CoinFlip from "./CoinFlip";
+// import UserBets from "./UserBets";
+// import TopWinsBets from "./TopWinsBets";
+// import ActiveBet from "./ActiveBet";
+// import BetUpdates from "./BetUpdates";
+// import RoundHistory from "./RoundHistory";
+// import { toast } from "react-toastify";
+// import ToastContainerWrapper from "./ToastContainerWrapper";
+// import NoActiveRound from "./NoActiveRound";
+// import LoadingSpinner from "./LoadingSpinner";      // Moved LoadingSpinner
+// import GameRoomTabs from "./GameRoomTabs";          // Moved Tabbed Navigation
+
+
+
+
+// export const formatResultMessage = (round, userBets, betAmount) => {
+//   if (!round || !round.outcome) return null;
+  
+//   // Ensure betAmount is a number
+//   const totalBetAmount = Number(betAmount) || 0;
+  
+//   const userWon = userBets.some(bet => bet.side === round.outcome);
+//   const outcome = round.outcome.charAt(0).toUpperCase() + round.outcome.slice(1);
+  
+//   // If user didn't place any bets
+//   if (!userBets || userBets.length === 0) {
+//     return {
+//       message: `Round ${round.roundNumber}: ${outcome} wins!`,
+//       type: 'info'
+//     };
+//   }
+
+//   // Calculate total winning amount
+//   const winningBets = userBets.filter(bet => bet.side === round.outcome);
+//   const totalWinAmount = winningBets.reduce((sum, bet) => sum + (bet.potentialWin || 0), 0);
+
+//   if (userWon) {
+//     return {
+//       message: `🎉 Congratulations! You won $${totalWinAmount.toFixed(2)} with ${outcome}!`,
+//       type: 'success'
+//     };
+//   } else {
+//     return {
+//       message: `💫 Better luck next time! You lost $${totalBetAmount.toFixed(2)}. ${outcome} wins!`,
+//       type: 'error'
+//     };
+//   }
+// };
+
+// export const getErrorMessage = (err) => {
+//   if (!err) return "";
+//   if (typeof err === "string") return err;
+//   if (err.message) return err.message;
+//   if (err.error)
+//     return typeof err.error === "string"
+//       ? err.error
+//       : JSON.stringify(err.error);
+//   return JSON.stringify(err);
+// };
+
+
+// // Main GameRoom Component
+// export default function GameRoom() {
+//   const dispatch = useDispatch();
+
+//   // Redux state
+//   const { currentRound, jackpot, betResults = [], loading, error } =
+//     useSelector((state) => state.round);
+//   const authUser = useSelector((state) => state.auth.user);
+
+//   const [timeLeft, setTimeLeft] = useState(0);
+//   const [activeTab, setActiveTab] = useState("activeBet");
+//   const [flipComplete, setFlipComplete] = useState(false);
+//   const [isRefreshing, setIsRefreshing] = useState(false);
+
+//   const timerRef = useRef(null);
+//   const autoRefreshRef = useRef(null);
+
+//   useAblyGameRoom();
+
+//   // Determine if there's no active round
+//   const errorMsg = getErrorMessage(error);
+//   const noActiveRoundError = useMemo(() => {
+//     if (loading) return false;
+//     return errorMsg.toLowerCase().includes("no active round") || !currentRound;
+//   }, [loading, currentRound, errorMsg]);
+
+//   // New round notification
+//   useEffect(() => {
+//     if (currentRound && !currentRound.outcome) {
+//       toast.info(`🎲 New Round #${currentRound.roundNumber} started!`, {
+//         position: "top-right",
+//         autoClose: 3000
+//       });
+//     }
+//   }, [currentRound?.roundNumber]);
+
+//   // Betting closure notification
+//   useEffect(() => {
+//     if (currentRound && timeLeft === 0 && !currentRound.outcome) {
+//       toast.warning('⏰ Betting is now closed!', {
+//         position: "top-center",
+//         autoClose: 3000
+//       });
+//     }
+//   }, [timeLeft, currentRound]);
+
+//   // Auto-refresh logic for no active round
+//   useEffect(() => {
+//     if (noActiveRoundError && !autoRefreshRef.current) {
+//       autoRefreshRef.current = setInterval(async () => {
+//         try {
+//           await dispatch(fetchCurrentRound());
+//         } catch (error) {
+//           console.error("Auto-refresh failed:", error);
+//         }
+//       }, 30000);
+//     }
+
+//     return () => {
+//       if (autoRefreshRef.current) {
+//         clearInterval(autoRefreshRef.current);
+//         autoRefreshRef.current = null;
+//       }
+//     };
+//   }, [noActiveRoundError, dispatch]);
+
+//   // Reset flip status on new round
+//   useEffect(() => {
+//     if (currentRound) {
+//       setFlipComplete(false);
+//     }
+//   }, [currentRound]);
+
+//   // Countdown timer logic
+//   useEffect(() => {
+//     if (!currentRound || currentRound.outcome !== null) {
+//       setTimeLeft(0);
+//       if (timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//       return;
+//     }
+
+//     const endTime = new Date(currentRound.endTime).getTime();
+
+//     const updateTime = () => {
+//       const now = Date.now();
+//       const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
+//       setTimeLeft(remaining);
+
+//       if (remaining <= 0 && timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//     };
+
+//     updateTime();
+//     timerRef.current = setInterval(updateTime, 1000);
+
+//     return () => {
+//       if (timerRef.current) clearInterval(timerRef.current);
+//     };
+//   }, [currentRound]);
+
+//   // Error handling
+//   useEffect(() => {
+//     if (errorMsg) {
+//       if (errorMsg.includes("E11000")) {
+//         toast.error("Multiple simultaneous bets detected. Please try again!");
+//       } else if (!errorMsg.toLowerCase().includes("no active round")) {
+//         toast.error(errorMsg);
+//       }
+//       dispatch(clearError());
+//     }
+//   }, [errorMsg, dispatch]);
+
+//   // Handle manual refresh
+//   const handleManualRefresh = async () => {
+//     setIsRefreshing(true);
+//     try {
+//       await dispatch(fetchCurrentRound());
+//       toast.success("Game status refreshed");
+//     } catch (error) {
+//       toast.error("Failed to refresh game status");
+//     } finally {
+//       setIsRefreshing(false);
+//     }
+//   };
+
+//   // Bet handlers
+//   const onBetSuccess = (betAmount, side) => {
+//     toast.success(`✅ Bet placed: $${betAmount} on ${side}`, {
+//       position: "bottom-right",
+//       autoClose: 3000
+//     });
+//   };
+
+//   const onBetError = (error) => {
+//     toast.error(`❌ ${error}`, {
+//       position: "bottom-right",
+//       autoClose: 4000
+//     });
+//   };
+
+//   // Filter bets by side for the current round
+//   const currentRoundId = currentRound ? currentRound._id : null;
+//   const headBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "heads" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+//   const tailBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "tails" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+
+//   // Filter the signed-in user's active bets
+//   const userActiveBets =
+//     authUser && currentRound && currentRound.outcome === null
+//       ? betResults.filter((bet) => {
+//           const betRound = bet.gameRound || bet.roundId;
+//           if (betRound !== currentRound._id) return false;
+//           if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
+//           if (!bet.phone && authUser._id) return bet.user === authUser._id;
+//           return false;
+//         })
+//       : [];
+
+//   return (
+//     <div className="max-w-6xl mx-auto p-6">
+//       <h1 className="text-3xl font-extrabold text-center mb-6">
+//         Coin Flip Betting Game
+//       </h1>
+
+//       {loading && !isRefreshing && <LoadingSpinner />}
+
+//       {noActiveRoundError ? (
+//         <NoActiveRound
+//           onRefresh={handleManualRefresh}
+//           isLoading={loading || isRefreshing}
+//         />
+//       ) : currentRound && currentRound.outcome === null ? (
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} (Active)
+//           </h2>
+//           <div className="flex flex-col md:flex-row md:justify-between mb-4">
+//             <p className="text-lg">
+//               <span className="font-medium">Time Left:</span> {timeLeft}s
+//             </p>
+//           </div>
+//           <CoinFlip round={currentRound} />
+//           {Date.now() < new Date(currentRound.countdownEndTime).getTime() ? (
+//             <BetForm 
+//               roundId={currentRound._id} 
+//               onBetSuccess={onBetSuccess}
+//               onBetError={onBetError}
+//             />
+//           ) : (
+//             <p className="text-red-600 mt-2 font-semibold">
+//               Betting is closed.
+//             </p>
+//           )}
+//         </div>
+//       ) : currentRound && currentRound.outcome ? (
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} Ended!
+//           </h2>
+//           {flipComplete && (
+//             <p className="text-lg mb-4">
+//               <span className="font-medium">Outcome:</span>{" "}
+//               {currentRound.outcome}
+//             </p>
+//           )}
+//              <CoinFlip
+//   round={currentRound}
+//   onFlipComplete={() => {
+//     setFlipComplete(true);
+    
+//     // Calculate total bet amount
+//     const totalBetAmount = userActiveBets.reduce(
+//       (sum, bet) => sum + (Number(bet.amount) || 0),
+//       0
+//     );
+
+//     // Only show result if user had active bets
+//     if (userActiveBets.length > 0) {
+//       const result = formatResultMessage(
+//         currentRound,
+//         userActiveBets,
+//         totalBetAmount
+//       );
+      
+//       if (result) {
+//         if (result.type === "success") {
+//           toast.success(result.message, {
+//             position: "top-center",
+//             autoClose: 5000,
+//             hideProgressBar: false,
+//             closeOnClick: true,
+//             pauseOnHover: true,
+//             draggable: true,
+//             progress: undefined,
+//             style: {
+//               background: "#4CAF50",
+//               color: "white",
+//               fontSize: "16px",
+//               fontWeight: "bold"
+//             }
+//           });
+//         } else if (result.type === "error") {
+//           toast.error(result.message, {
+//             position: "top-center",
+//             autoClose: 4000,
+//             hideProgressBar: false,
+//             closeOnClick: true,
+//             pauseOnHover: true,
+//             draggable: true,
+//             progress: undefined,
+//             style: {
+//               fontSize: "16px"
+//             }
+//           });
+//         } else {
+//           toast.info(result.message, {
+//             position: "top-center",
+//             autoClose: 4000
+//           });
+//         }
+//       }
+//     }
+//   }}
+// />
+          
+              
+
+
+
+
+
+//           <p className="mt-4 text-gray-700">
+//             Please wait for the next round to start...
+//           </p>
+//         </div>
+//       ) : null}
+
+//       {/* Jackpot Section */}
+//       <div className="bg-yellow-100 rounded-lg p-4 mb-6 text-center">
+//         <h3 className="text-xl font-bold">
+//           Jackpot: {Number(jackpot || 0).toFixed(2)}
+//         </h3>
+//       </div>
+
+//       {/* Additional Components */}
+//       <BetUpdates headBets={headBets} tailBets={tailBets} />
+//       <RoundHistory />
+
+//       {/* Tabbed Navigation */}
+//       <GameRoomTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+//       <div>
+//         {activeTab === "activeBet" && <ActiveBet userActiveBets={userActiveBets} />}
+//         {activeTab === "betHistory" && (
+//           <div className="bg-green-100 rounded-lg p-4">
+//             <UserBets />
+//           </div>
+//         )}
+//         {activeTab === "topWins" && (
+//           <div className="bg-purple-100 rounded-lg p-4">
+//             <TopWinsBets />
+//           </div>
+//         )}
+//       </div>
+
+//       {/* Toast Notifications */}
+//       <ToastContainerWrapper />
+//     </div>
+//   );
+// }
+
+// // src/components/GameRoom.js
+// import React, { useEffect, useState, useRef, useMemo } from "react";
+// import { useDispatch, useSelector } from "react-redux";
+// import { clearError, fetchCurrentRound } from "../features/roundSlice";
+// import { FiRefreshCw, FiClock } from "react-icons/fi";
+// import useAblyGameRoom from "../hooks/useAblyGameRoom";
+// import BetForm from "./BetForm";
+// import CoinFlip from "./CoinFlip";
+// import UserBets from "./UserBets";
+// import TopWinsBets from "./TopWinsBets";
+// import ActiveBet from "./ActiveBet";
+// import BetUpdates from "./BetUpdates";
+// import RoundHistory from "./RoundHistory";
+// import { toast } from "react-toastify";
+// import ToastContainerWrapper from "./ToastContainerWrapper";
+// import NoActiveRound from "./NoActiveRound"; // Imported from its own file
+
+// // Helper function for formatting game result messages
+// const formatResultMessage = (round, userBets, betAmount) => {
+//   if (!round || !round.outcome) return null;
+  
+//   const userWon = userBets.some(bet => bet.side === round.outcome);
+//   const outcome = round.outcome.charAt(0).toUpperCase() + round.outcome.slice(1);
+  
+//   if (userBets.length === 0) {
+//     return {
+//       message: `Round ${round.roundNumber}: ${outcome} wins!`,
+//       type: 'info'
+//     };
+//   }
+
+//   const winningBet = userBets.find(bet => bet.side === round.outcome);
+//   const winAmount = winningBet ? winningBet.potentialWin : 0;
+
+//   if (userWon) {
+//     return {
+//       message: `🎉 Congratulations! You won $${winAmount.toFixed(2)} with ${outcome}!`,
+//       type: 'success'
+//     };
+//   } else {
+//     return {
+//       message: `💫 Better luck next time! You lost $${betAmount.toFixed(2)}. ${outcome} wins!`,
+//       type: 'info'
+//     };
+//   }
+// };
+
+// // Helper function to convert error objects to strings
+// function getErrorMessage(err) {
+//   if (!err) return "";
+//   if (typeof err === "string") return err;
+//   if (err.message) return err.message;
+//   if (err.error)
+//     return typeof err.error === "string"
+//       ? err.error
+//       : JSON.stringify(err.error);
+//   return JSON.stringify(err);
+// }
+
+// // Loading Spinner Component
+// const LoadingSpinner = () => (
+//   <div className="flex justify-center items-center p-4">
+//     <FiRefreshCw className="animate-spin h-8 w-8 text-blue-500" />
+//   </div>
+// );
+
+// // Main GameRoom Component
+// export default function GameRoom() {
+//   const dispatch = useDispatch();
+
+//   // Redux state
+//   const { currentRound, jackpot, betResults = [], loading, error } =
+//     useSelector((state) => state.round);
+//   const authUser = useSelector((state) => state.auth.user);
+
+//   const [timeLeft, setTimeLeft] = useState(0);
+//   const [activeTab, setActiveTab] = useState("activeBet");
+//   const [flipComplete, setFlipComplete] = useState(false);
+//   const [isRefreshing, setIsRefreshing] = useState(false);
+
+//   const timerRef = useRef(null);
+//   const autoRefreshRef = useRef(null);
+
+//   useAblyGameRoom();
+
+//   // Helper to determine if there's no active round
+//   const errorMsg = getErrorMessage(error);
+//   const noActiveRoundError = useMemo(() => {
+//     if (loading) return false;
+//     return errorMsg.toLowerCase().includes("no active round") || !currentRound;
+//   }, [loading, currentRound, errorMsg]);
+
+//   // New round notification
+//   useEffect(() => {
+//     if (currentRound && !currentRound.outcome) {
+//       toast.info(`🎲 New Round #${currentRound.roundNumber} started!`, {
+//         position: "top-right",
+//         autoClose: 3000
+//       });
+//     }
+//   }, [currentRound?.roundNumber]);
+
+//   // Betting closure notification
+//   useEffect(() => {
+//     if (currentRound && timeLeft === 0 && !currentRound.outcome) {
+//       toast.warning('⏰ Betting is now closed!', {
+//         position: "top-center",
+//         autoClose: 3000
+//       });
+//     }
+//   }, [timeLeft, currentRound]);
+
+//   // Auto-refresh logic for no active round
+//   useEffect(() => {
+//     if (noActiveRoundError && !autoRefreshRef.current) {
+//       autoRefreshRef.current = setInterval(async () => {
+//         try {
+//           await dispatch(fetchCurrentRound());
+//         } catch (error) {
+//           console.error("Auto-refresh failed:", error);
+//         }
+//       }, 30000);
+//     }
+
+//     return () => {
+//       if (autoRefreshRef.current) {
+//         clearInterval(autoRefreshRef.current);
+//         autoRefreshRef.current = null;
+//       }
+//     };
+//   }, [noActiveRoundError, dispatch]);
+
+//   // Reset flip status on new round
+//   useEffect(() => {
+//     if (currentRound) {
+//       setFlipComplete(false);
+//     }
+//   }, [currentRound]);
+
+//   // Countdown timer logic
+//   useEffect(() => {
+//     if (!currentRound || currentRound.outcome !== null) {
+//       setTimeLeft(0);
+//       if (timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//       return;
+//     }
+
+//     const endTime = new Date(currentRound.endTime).getTime();
+
+//     const updateTime = () => {
+//       const now = Date.now();
+//       const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
+//       setTimeLeft(remaining);
+
+//       if (remaining <= 0 && timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//     };
+
+//     updateTime();
+//     timerRef.current = setInterval(updateTime, 1000);
+
+//     return () => {
+//       if (timerRef.current) clearInterval(timerRef.current);
+//     };
+//   }, [currentRound]);
+
+//   // Error handling
+//   useEffect(() => {
+//     if (errorMsg) {
+//       if (errorMsg.includes("E11000")) {
+//         toast.error("Multiple simultaneous bets detected. Please try again!");
+//       } else if (!errorMsg.toLowerCase().includes("no active round")) {
+//         toast.error(errorMsg);
+//       }
+//       dispatch(clearError());
+//     }
+//   }, [errorMsg, dispatch]);
+
+//   // Handle manual refresh
+//   const handleManualRefresh = async () => {
+//     setIsRefreshing(true);
+//     try {
+//       await dispatch(fetchCurrentRound());
+//       toast.success("Game status refreshed");
+//     } catch (error) {
+//       toast.error("Failed to refresh game status");
+//     } finally {
+//       setIsRefreshing(false);
+//     }
+//   };
+
+//   // Bet handlers
+//   const onBetSuccess = (betAmount, side) => {
+//     toast.success(`✅ Bet placed: $${betAmount} on ${side}`, {
+//       position: "bottom-right",
+//       autoClose: 3000
+//     });
+//   };
+
+//   const onBetError = (error) => {
+//     toast.error(`❌ ${error}`, {
+//       position: "bottom-right",
+//       autoClose: 4000
+//     });
+//   };
+
+//   // Filter bets by side for the current round
+//   const currentRoundId = currentRound ? currentRound._id : null;
+//   const headBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "heads" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+//   const tailBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "tails" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+
+//   // Filter the signed-in user's active bets
+//   const userActiveBets =
+//     authUser && currentRound && currentRound.outcome === null
+//       ? betResults.filter((bet) => {
+//           const betRound = bet.gameRound || bet.roundId;
+//           if (betRound !== currentRound._id) return false;
+
+//           if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
+//           if (!bet.phone && authUser._id) return bet.user === authUser._id;
+//           return false;
+//         })
+//       : [];
+
+//   return (
+//     <div className="max-w-6xl mx-auto p-6">
+//       <h1 className="text-3xl font-extrabold text-center mb-6">
+//         Coin Flip Betting Game
+//       </h1>
+
+//       {loading && !isRefreshing && <LoadingSpinner />}
+
+//       {noActiveRoundError ? (
+//         <NoActiveRound
+//           onRefresh={handleManualRefresh}
+//           isLoading={loading || isRefreshing}
+//         />
+//       ) : currentRound && currentRound.outcome === null ? (
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} (Active)
+//           </h2>
+//           <div className="flex flex-col md:flex-row md:justify-between mb-4">
+//             <p className="text-lg">
+//               <span className="font-medium">Time Left:</span> {timeLeft}s
+//             </p>
+//           </div>
+//           <CoinFlip round={currentRound} />
+//           {Date.now() < new Date(currentRound.countdownEndTime).getTime() ? (
+//             <BetForm 
+//               roundId={currentRound._id} 
+//               onBetSuccess={onBetSuccess}
+//               onBetError={onBetError}
+//             />
+//           ) : (
+//             <p className="text-red-600 mt-2 font-semibold">
+//               Betting is closed.
+//             </p>
+//           )}
+//         </div>
+//       ) : currentRound && currentRound.outcome ? (
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} Ended!
+//           </h2>
+//           {flipComplete && (
+//             <p className="text-lg mb-4">
+//               <span className="font-medium">Outcome:</span>{" "}
+//               {currentRound.outcome}
+//             </p>
+//           )}
+//           <CoinFlip
+//             round={currentRound}
+//             onFlipComplete={() => {
+//               setFlipComplete(true);
+//               const totalBetAmount = userActiveBets.reduce((sum, bet) => sum + bet.amount, 0);
+//               const result = formatResultMessage(currentRound, userActiveBets, totalBetAmount);
+              
+//               if (result.type === 'success') {
+//                 toast.success(result.message, {
+//                   position: "top-center",
+//                   autoClose: 5000,
+//                   hideProgressBar: false,
+//                   closeOnClick: true,
+//                   pauseOnHover: true,
+//                   draggable: true,
+//                   progress: undefined,
+//                   style: {
+//                     background: '#4CAF50',
+//                     color: 'white',
+//                     fontSize: '16px',
+//                     fontWeight: 'bold'
+//                   }
+//                 });
+//               } else {
+//                 toast.info(result.message, {
+//                   position: "top-center",
+//                   autoClose: 4000,
+//                   hideProgressBar: false,
+//                   closeOnClick: true,
+//                   pauseOnHover: true,
+//                   draggable: true,
+//                   progress: undefined,
+//                   style: {
+//                     fontSize: '16px'
+//                   }
+//                 });
+//               }
+//             }}
+//           />
+//           <p className="mt-4 text-gray-700">
+//             Please wait for the next round to start...
+//           </p>
+//         </div>
+//       ) : null}
+
+//       {/* Jackpot Section */}
+//       <div className="bg-yellow-100 rounded-lg p-4 mb-6 text-center">
+//         <h3 className="text-xl font-bold">
+//           Jackpot: {Number(jackpot || 0).toFixed(2)}
+//         </h3>
+//       </div>
+
+//       {/* Additional Components */}
+//       <BetUpdates headBets={headBets} tailBets={tailBets} />
+//       <RoundHistory />
+
+//       {/* Tabbed Navigation */}
+//       <div className="mt-8">
+//         <div className="flex justify-center mb-4 space-x-4">
+//           <button
+//             onClick={() => setActiveTab("activeBet")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "activeBet"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Your Active Bet
+//           </button>
+//           <button
+//             onClick={() => setActiveTab("betHistory")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "betHistory"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Your Bet History
+//           </button>
+//           <button
+//             onClick={() => setActiveTab("topWins")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "topWins"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Top 10 Wins
+//           </button>
+//         </div>
+//         <div>
+//           {activeTab === "activeBet" && <ActiveBet userActiveBets={userActiveBets} />}
+//           {activeTab === "betHistory" && (
+//             <div className="bg-green-100 rounded-lg p-4">
+//               <UserBets />
+//             </div>
+//           )}
+//           {activeTab === "topWins" && (
+//             <div className="bg-purple-100 rounded-lg p-4">
+//               <TopWinsBets />
+//             </div>
+//           )}
+//         </div>
+//       </div>
+
+//       {/* Toast Notifications */}
+//       <ToastContainerWrapper />
+//     </div>
+//   );
+// }
+
+// // src/components/GameRoom.js
+// import React, { useEffect, useState, useRef, useMemo } from "react";
+// import { useDispatch, useSelector } from "react-redux";
+// import { clearError, fetchCurrentRound } from "../features/roundSlice";
+// import { FiRefreshCw, FiClock, FiAlertCircle } from 'react-icons/fi';
+// import useAblyGameRoom from "../hooks/useAblyGameRoom";
+// import BetForm from "./BetForm";
+// import CoinFlip from "./CoinFlip";
+// import UserBets from "./UserBets";
+// import TopWinsBets from "./TopWinsBets";
+// import ActiveBet from "./ActiveBet";
+// import BetUpdates from "./BetUpdates";
+// import RoundHistory from "./RoundHistory";
+// import { toast } from "react-toastify";
+// import ToastContainerWrapper from "./ToastContainerWrapper";
+
+// // Helper function for formatting game result messages
+// const formatResultMessage = (round, userBets, betAmount) => {
+//   if (!round || !round.outcome) return null;
+  
+//   const userWon = userBets.some(bet => bet.side === round.outcome);
+//   const outcome = round.outcome.charAt(0).toUpperCase() + round.outcome.slice(1);
+  
+//   if (userBets.length === 0) {
+//     return {
+//       message: `Round ${round.roundNumber}: ${outcome} wins!`,
+//       type: 'info'
+//     };
+//   }
+
+//   const winningBet = userBets.find(bet => bet.side === round.outcome);
+//   const winAmount = winningBet ? winningBet.potentialWin : 0;
+
+//   if (userWon) {
+//     return {
+//       message: `🎉 Congratulations! You won $${winAmount.toFixed(2)} with ${outcome}!`,
+//       type: 'success'
+//     };
+//   } else {
+//     return {
+//       message: `💫 Better luck next time! You lost $${betAmount.toFixed(2)}. ${outcome} wins!`,
+//       type: 'info'
+//     };
+//   }
+// };
+
+// // NoActiveRound Component
+// const NoActiveRound = ({ onRefresh, isLoading }) => {
+//   const [countdown, setCountdown] = useState(30);
+
+//   useEffect(() => {
+//     if (countdown > 0) {
+//       const timer = setTimeout(() => setCountdown(prev => prev - 1), 1000);
+//       return () => clearTimeout(timer);
+//     }
+//   }, [countdown]);
+
+//   return (
+//     <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-lg mb-6 transition-all duration-300">
+//       <div className="text-center space-y-6">
+//         <div className="bg-yellow-50 rounded-full w-16 h-16 mx-auto flex items-center justify-center">
+//           <FiAlertCircle className="w-8 h-8 text-yellow-500" />
+//         </div>
+        
+//         <div className="space-y-2">
+//           <h3 className="text-xl font-bold text-gray-900">
+//             No Active Round Available
+//           </h3>
+//           <p className="text-gray-600">
+//             The next betting round will start soon
+//           </p>
+//         </div>
+        
+//         <div className="bg-gray-50 rounded-lg p-4 max-w-md mx-auto">
+//           <div className="flex items-center justify-center space-x-2 text-gray-600">
+//             <FiClock className="w-5 h-5" />
+//             <span>Auto-refresh in: {countdown}s</span>
+//           </div>
+//         </div>
+
+//         <div className="flex flex-col items-center space-y-4">
+//           <button
+//             onClick={onRefresh}
+//             disabled={isLoading}
+//             className="inline-flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors duration-200"
+//           >
+//             {isLoading ? (
+//               <>
+//                 <FiRefreshCw className="animate-spin -ml-1 mr-2 h-5 w-5" />
+//                 Refreshing...
+//               </>
+//             ) : (
+//               <>
+//                 <FiRefreshCw className="-ml-1 mr-2 h-5 w-5" />
+//                 Refresh Now
+//               </>
+//             )}
+//           </button>
+          
+//           <p className="text-sm text-gray-500">
+//             You can refresh manually or wait for auto-refresh
+//           </p>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// };
+
+// // Helper function to convert error objects to strings
+// function getErrorMessage(err) {
+//   if (!err) return "";
+//   if (typeof err === "string") return err;
+//   if (err.message) return err.message;
+//   if (err.error)
+//     return typeof err.error === "string"
+//       ? err.error
+//       : JSON.stringify(err.error);
+//   return JSON.stringify(err);
+// }
+
+// // Loading Spinner Component
+// const LoadingSpinner = () => (
+//   <div className="flex justify-center items-center p-4">
+//     <FiRefreshCw className="animate-spin h-8 w-8 text-blue-500" />
+//   </div>
+// );
+
+// // Main GameRoom Component
+// export default function GameRoom() {
+//   const dispatch = useDispatch();
+
+//   // Redux state
+//   const { currentRound, jackpot, betResults = [], loading, error } =
+//     useSelector((state) => state.round);
+//   const authUser = useSelector((state) => state.auth.user);
+
+//   const [timeLeft, setTimeLeft] = useState(0);
+//   const [activeTab, setActiveTab] = useState("activeBet");
+//   const [flipComplete, setFlipComplete] = useState(false);
+//   const [isRefreshing, setIsRefreshing] = useState(false);
+
+//   const timerRef = useRef(null);
+//   const autoRefreshRef = useRef(null);
+
+//   useAblyGameRoom();
+
+//   // Helper to determine if there's no active round
+//   const errorMsg = getErrorMessage(error);
+//   const noActiveRoundError = useMemo(() => {
+//     if (loading) return false;
+//     return errorMsg.toLowerCase().includes("no active round") || !currentRound;
+//   }, [loading, currentRound, errorMsg]);
+
+//   // New round notification
+//   useEffect(() => {
+//     if (currentRound && !currentRound.outcome) {
+//       toast.info(`🎲 New Round #${currentRound.roundNumber} started!`, {
+//         position: "top-right",
+//         autoClose: 3000
+//       });
+//     }
+//   }, [currentRound?.roundNumber]);
+
+//   // Betting closure notification
+//   useEffect(() => {
+//     if (currentRound && timeLeft === 0 && !currentRound.outcome) {
+//       toast.warning('⏰ Betting is now closed!', {
+//         position: "top-center",
+//         autoClose: 3000
+//       });
+//     }
+//   }, [timeLeft, currentRound]);
+
+//   // Auto-refresh logic for no active round
+//   useEffect(() => {
+//     if (noActiveRoundError && !autoRefreshRef.current) {
+//       autoRefreshRef.current = setInterval(async () => {
+//         try {
+//           await dispatch(fetchCurrentRound());
+//         } catch (error) {
+//           console.error("Auto-refresh failed:", error);
+//         }
+//       }, 30000);
+//     }
+
+//     return () => {
+//       if (autoRefreshRef.current) {
+//         clearInterval(autoRefreshRef.current);
+//         autoRefreshRef.current = null;
+//       }
+//     };
+//   }, [noActiveRoundError, dispatch]);
+
+//   // Reset flip status on new round
+//   useEffect(() => {
+//     if (currentRound) {
+//       setFlipComplete(false);
+//     }
+//   }, [currentRound]);
+
+//   // Countdown timer logic
+//   useEffect(() => {
+//     if (!currentRound || currentRound.outcome !== null) {
+//       setTimeLeft(0);
+//       if (timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//       return;
+//     }
+
+//     const endTime = new Date(currentRound.endTime).getTime();
+
+//     const updateTime = () => {
+//       const now = Date.now();
+//       const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
+//       setTimeLeft(remaining);
+
+//       if (remaining <= 0 && timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//     };
+
+//     updateTime();
+//     timerRef.current = setInterval(updateTime, 1000);
+
+//     return () => {
+//       if (timerRef.current) clearInterval(timerRef.current);
+//     };
+//   }, [currentRound]);
+
+//   // Error handling
+//   useEffect(() => {
+//     if (errorMsg) {
+//       if (errorMsg.includes("E11000")) {
+//         toast.error("Multiple simultaneous bets detected. Please try again!");
+//       } else if (!errorMsg.toLowerCase().includes("no active round")) {
+//         toast.error(errorMsg);
+//       }
+//       dispatch(clearError());
+//     }
+//   }, [errorMsg, dispatch]);
+
+//   // Handle manual refresh
+//   const handleManualRefresh = async () => {
+//     setIsRefreshing(true);
+//     try {
+//       await dispatch(fetchCurrentRound());
+//       toast.success("Game status refreshed");
+//     } catch (error) {
+//       toast.error("Failed to refresh game status");
+//     } finally {
+//       setIsRefreshing(false);
+//     }
+//   };
+
+//   // Bet handlers
+//   const onBetSuccess = (betAmount, side) => {
+//     toast.success(`✅ Bet placed: $${betAmount} on ${side}`, {
+//       position: "bottom-right",
+//       autoClose: 3000
+//     });
+//   };
+
+//   const onBetError = (error) => {
+//     toast.error(`❌ ${error}`, {
+//       position: "bottom-right",
+//       autoClose: 4000
+//     });
+//   };
+
+
+//   // Filter bets by side for the current round
+//   const currentRoundId = currentRound ? currentRound._id : null;
+//   const headBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "heads" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+//   const tailBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "tails" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+
+//   // Filter the signed-in user's active bets
+//   const userActiveBets =
+//     authUser && currentRound && currentRound.outcome === null
+//       ? betResults.filter((bet) => {
+//           const betRound = bet.gameRound || bet.roundId;
+//           if (betRound !== currentRound._id) return false;
+
+//           if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
+//           if (!bet.phone && authUser._id) return bet.user === authUser._id;
+//           return false;
+//         })
+//       : [];
+
+//   return (
+//     <div className="max-w-6xl mx-auto p-6">
+//       <h1 className="text-3xl font-extrabold text-center mb-6">
+//         Coin Flip Betting Game
+//       </h1>
+
+//       {loading && !isRefreshing && <LoadingSpinner />}
+
+//       {noActiveRoundError ? (
+//         <NoActiveRound
+//           onRefresh={handleManualRefresh}
+//           isLoading={loading || isRefreshing}
+//         />
+//       ) : currentRound && currentRound.outcome === null ? (
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} (Active)
+//           </h2>
+//           <div className="flex flex-col md:flex-row md:justify-between mb-4">
+//             <p className="text-lg">
+//               <span className="font-medium">Time Left:</span> {timeLeft}s
+//             </p>
+//           </div>
+//           <CoinFlip round={currentRound} />
+//           {Date.now() < new Date(currentRound.countdownEndTime).getTime() ? (
+//             <BetForm 
+//               roundId={currentRound._id} 
+//               onBetSuccess={onBetSuccess}
+//               onBetError={onBetError}
+//             />
+//           ) : (
+//             <p className="text-red-600 mt-2 font-semibold">
+//               Betting is closed.
+//             </p>
+//           )}
+//         </div>
+//       ) : currentRound && currentRound.outcome ? (
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} Ended!
+//           </h2>
+//           {flipComplete && (
+//             <p className="text-lg mb-4">
+//               <span className="font-medium">Outcome:</span>{" "}
+//               {currentRound.outcome}
+//             </p>
+//           )}
+//           <CoinFlip
+//             round={currentRound}
+//             onFlipComplete={() => {
+//               setFlipComplete(true);
+//               const totalBetAmount = userActiveBets.reduce((sum, bet) => sum + bet.amount, 0);
+//               const result = formatResultMessage(currentRound, userActiveBets, totalBetAmount);
+              
+//               if (result.type === 'success') {
+//                 toast.success(result.message, {
+//                   position: "top-center",
+//                   autoClose: 5000,
+//                   hideProgressBar: false,
+//                   closeOnClick: true,
+//                   pauseOnHover: true,
+//                   draggable: true,
+//                   progress: undefined,
+//                   style: {
+//                     background: '#4CAF50',
+//                     color: 'white',
+//                     fontSize: '16px',
+//                     fontWeight: 'bold'
+//                   }
+//                 });
+//               } else {
+//                 toast.info(result.message, {
+//                   position: "top-center",
+//                   autoClose: 4000,
+//                   hideProgressBar: false,
+//                   closeOnClick: true,
+//                   pauseOnHover: true,
+//                   draggable: true,
+//                   progress: undefined,
+//                   style: {
+//                     fontSize: '16px'
+//                   }
+//                 });
+//               }
+//             }}
+//           />
+//           <p className="mt-4 text-gray-700">
+//             Please wait for the next round to start...
+//           </p>
+//         </div>
+//       ) : null}
+
+//       {/* Jackpot Section */}
+//       <div className="bg-yellow-100 rounded-lg p-4 mb-6 text-center">
+//         <h3 className="text-xl font-bold">
+//           Jackpot: {Number(jackpot || 0).toFixed(2)}
+//         </h3>
+//       </div>
+
+//       {/* Additional Components */}
+//       <BetUpdates headBets={headBets} tailBets={tailBets} />
+//       <RoundHistory />
+
+//       {/* Tabbed Navigation */}
+//       <div className="mt-8">
+//         <div className="flex justify-center mb-4 space-x-4">
+//           <button
+//             onClick={() => setActiveTab("activeBet")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "activeBet"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Your Active Bet
+//           </button>
+//           <button
+//             onClick={() => setActiveTab("betHistory")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "betHistory"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Your Bet History
+//           </button>
+//           <button
+//             onClick={() => setActiveTab("topWins")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "topWins"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Top 10 Wins
+//           </button>
+//         </div>
+//         <div>
+//           {activeTab === "activeBet" && <ActiveBet userActiveBets={userActiveBets} />}
+//           {activeTab === "betHistory" && (
+//             <div className="bg-green-100 rounded-lg p-4">
+//               <UserBets />
+//             </div>
+//           )}
+//           {activeTab === "topWins" && (
+//             <div className="bg-purple-100 rounded-lg p-4">
+//               <TopWinsBets />
+//             </div>
+//           )}
+//         </div>
+//       </div>
+
+//       {/* Toast Notifications */}
+//       <ToastContainerWrapper />
+//     </div>
+//   );
+// }
+// // src/components/GameRoom.js
+// import React, { useEffect, useState, useRef, useMemo } from "react";
+// import { useDispatch, useSelector } from "react-redux";
+// import { clearError, fetchCurrentRound } from "../features/roundSlice";
+// import { FiRefreshCw, FiClock, FiAlertCircle } from 'react-icons/fi';
+// import useAblyGameRoom from "../hooks/useAblyGameRoom";
+// import BetForm from "./BetForm";
+// import CoinFlip from "./CoinFlip";
+// import UserBets from "./UserBets";
+// import TopWinsBets from "./TopWinsBets";
+// import ActiveBet from "./ActiveBet";
+// import BetUpdates from "./BetUpdates";
+// import RoundHistory from "./RoundHistory";
+// import { toast } from "react-toastify";
+// import ToastContainerWrapper from "./ToastContainerWrapper";
+
+// // NoActiveRound Component
+// const NoActiveRound = ({ onRefresh, isLoading }) => {
+//   const [countdown, setCountdown] = useState(30);
+
+//   useEffect(() => {
+//     if (countdown > 0) {
+//       const timer = setTimeout(() => setCountdown(prev => prev - 1), 1000);
+//       return () => clearTimeout(timer);
+//     }
+//   }, [countdown]);
+
+//   return (
+//     <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-lg mb-6 transition-all duration-300">
+//       <div className="text-center space-y-6">
+//         <div className="bg-yellow-50 rounded-full w-16 h-16 mx-auto flex items-center justify-center">
+//           <FiAlertCircle className="w-8 h-8 text-yellow-500" />
+//         </div>
+        
+//         <div className="space-y-2">
+//           <h3 className="text-xl font-bold text-gray-900">
+//             No Active Round Available
+//           </h3>
+//           <p className="text-gray-600">
+//             The next betting round will start soon
+//           </p>
+//         </div>
+        
+//         <div className="bg-gray-50 rounded-lg p-4 max-w-md mx-auto">
+//           <div className="flex items-center justify-center space-x-2 text-gray-600">
+//             <FiClock className="w-5 h-5" />
+//             <span>Auto-refresh in: {countdown}s</span>
+//           </div>
+//         </div>
+
+//         <div className="flex flex-col items-center space-y-4">
+//           <button
+//             onClick={onRefresh}
+//             disabled={isLoading}
+//             className="inline-flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors duration-200"
+//           >
+//             {isLoading ? (
+//               <>
+//                 <FiRefreshCw className="animate-spin -ml-1 mr-2 h-5 w-5" />
+//                 Refreshing...
+//               </>
+//             ) : (
+//               <>
+//                 <FiRefreshCw className="-ml-1 mr-2 h-5 w-5" />
+//                 Refresh Now
+//               </>
+//             )}
+//           </button>
+          
+//           <p className="text-sm text-gray-500">
+//             You can refresh manually or wait for auto-refresh
+//           </p>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// };
+
+// // Helper function to convert error objects to strings
+// function getErrorMessage(err) {
+//   if (!err) return "";
+//   if (typeof err === "string") return err;
+//   if (err.message) return err.message;
+//   if (err.error)
+//     return typeof err.error === "string"
+//       ? err.error
+//       : JSON.stringify(err.error);
+//   return JSON.stringify(err);
+// }
+
+// // Loading Spinner Component
+// const LoadingSpinner = () => (
+//   <div className="flex justify-center items-center p-4">
+//     <FiRefreshCw className="animate-spin h-8 w-8 text-blue-500" />
+//   </div>
+// );
+
+
+// export default function GameRoom() {
+//   const dispatch = useDispatch();
+
+//   // Redux state
+//   const { currentRound, jackpot, betResults = [], loading, error } =
+//     useSelector((state) => state.round);
+//   const authUser = useSelector((state) => state.auth.user);
+
+//   const [timeLeft, setTimeLeft] = useState(0);
+//   const [activeTab, setActiveTab] = useState("activeBet");
+//   const [flipComplete, setFlipComplete] = useState(false);
+//   const [isRefreshing, setIsRefreshing] = useState(false);
+
+//   const timerRef = useRef(null);
+//   const autoRefreshRef = useRef(null);
+
+//   useAblyGameRoom();
+
+//   // Helper to determine if there's no active round
+//   const errorMsg = getErrorMessage(error);
+//   const noActiveRoundError = useMemo(() => {
+//     if (loading) return false;
+//     return errorMsg.toLowerCase().includes("no active round") || !currentRound;
+//   }, [loading, currentRound, errorMsg]);
+
+//   // Auto-refresh logic for no active round
+//   useEffect(() => {
+//     if (noActiveRoundError && !autoRefreshRef.current) {
+//       autoRefreshRef.current = setInterval(async () => {
+//         try {
+//           await dispatch(fetchCurrentRound());
+//         } catch (error) {
+//           console.error("Auto-refresh failed:", error);
+//         }
+//       }, 30000); // Refresh every 30 seconds
+//     }
+
+//     return () => {
+//       if (autoRefreshRef.current) {
+//         clearInterval(autoRefreshRef.current);
+//         autoRefreshRef.current = null;
+//       }
+//     };
+//   }, [noActiveRoundError, dispatch]);
+
+//   // Reset flip status on new round
+//   useEffect(() => {
+//     if (currentRound) {
+//       setFlipComplete(false);
+//     }
+//   }, [currentRound]);
+
+//   // Countdown timer logic
+//   useEffect(() => {
+//     if (!currentRound || currentRound.outcome !== null) {
+//       setTimeLeft(0);
+//       if (timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//       return;
+//     }
+
+//     const endTime = new Date(currentRound.endTime).getTime();
+
+//     const updateTime = () => {
+//       const now = Date.now();
+//       const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
+//       setTimeLeft(remaining);
+
+//       if (remaining <= 0 && timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//     };
+
+//     updateTime();
+//     timerRef.current = setInterval(updateTime, 1000);
+
+//     return () => {
+//       if (timerRef.current) clearInterval(timerRef.current);
+//     };
+//   }, [currentRound]);
+
+//   // Error handling
+//   useEffect(() => {
+//     if (errorMsg) {
+//       if (errorMsg.includes("E11000")) {
+//         toast.error("Multiple simultaneous bets detected. Please try again!");
+//       } else if (!errorMsg.toLowerCase().includes("no active round")) {
+//         toast.error(errorMsg);
+//       }
+//       dispatch(clearError());
+//     }
+//   }, [errorMsg, dispatch]);
+
+//   // Handle manual refresh
+//   const handleManualRefresh = async () => {
+//     setIsRefreshing(true);
+//     try {
+//       await dispatch(fetchCurrentRound());
+//       toast.success("Game status refreshed");
+//     } catch (error) {
+//       toast.error("Failed to refresh game status");
+//     } finally {
+//       setIsRefreshing(false);
+//     }
+//   };
+
+//   // Filter bets by side for the current round
+//   const currentRoundId = currentRound ? currentRound._id : null;
+//   const headBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "heads" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+//   const tailBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "tails" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+
+//   // Filter the signed-in user's active bets
+//   const userActiveBets =
+//     authUser && currentRound && currentRound.outcome === null
+//       ? betResults.filter((bet) => {
+//           const betRound = bet.gameRound || bet.roundId;
+//           if (betRound !== currentRound._id) return false;
+
+//           if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
+//           if (!bet.phone && authUser._id) return bet.user === authUser._id;
+//           return false;
+//         })
+//       : [];
+
+//   return (
+//     <div className="max-w-6xl mx-auto p-6">
+//       <h1 className="text-3xl font-extrabold text-center mb-6">
+//         Coin Flip Betting Game
+//       </h1>
+
+//       {loading && !isRefreshing && <LoadingSpinner />}
+
+//       {/* No Active Round */}
+//       {noActiveRoundError ? (
+//         <NoActiveRound
+//           onRefresh={handleManualRefresh}
+//           isLoading={loading || isRefreshing}
+//         />
+//       ) : currentRound && currentRound.outcome === null ? (
+//         // Active round
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} (Active)
+//           </h2>
+//           <div className="flex flex-col md:flex-row md:justify-between mb-4">
+//             <p className="text-lg">
+//               <span className="font-medium">Time Left:</span> {timeLeft}s
+//             </p>
+//           </div>
+//           <CoinFlip round={currentRound} />
+//           {Date.now() < new Date(currentRound.countdownEndTime).getTime() ? (
+//             <BetForm roundId={currentRound._id} />
+//           ) : (
+//             <p className="text-red-600 mt-2 font-semibold">
+//               Betting is closed.
+//             </p>
+//           )}
+//         </div>
+//       ) : currentRound && currentRound.outcome ? (
+//         // Ended round
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} Ended!
+//           </h2>
+//           {flipComplete && (
+//             <p className="text-lg mb-4">
+//               <span className="font-medium">Outcome:</span>{" "}
+//               {currentRound.outcome}
+//             </p>
+//           )}
+//           <CoinFlip
+//             round={currentRound}
+//             onFlipComplete={() => {
+//               setFlipComplete(true);
+//               toast.info(
+//                 `Round ${currentRound.roundNumber} ended with outcome: ${currentRound.outcome}`
+//               );
+//             }}
+//           />
+//           <p className="mt-4 text-gray-700">
+//             Please wait for the next round to start...
+//           </p>
+//         </div>
+//       ) : null}
+
+//       {/* Jackpot Section */}
+//       <div className="bg-yellow-100 rounded-lg p-4 mb-6 text-center">
+//         <h3 className="text-xl font-bold">
+//           Jackpot: {Number(jackpot || 0).toFixed(2)}
+//         </h3>
+//       </div>
+
+//       {/* Additional Components */}
+//       <BetUpdates headBets={headBets} tailBets={tailBets} />
+//       <RoundHistory />
+
+//       {/* Tabbed Navigation */}
+//       <div className="mt-8">
+//         <div className="flex justify-center mb-4 space-x-4">
+//           <button
+//             onClick={() => setActiveTab("activeBet")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "activeBet"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Your Active Bet
+//           </button>
+//           <button
+//             onClick={() => setActiveTab("betHistory")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "betHistory"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Your Bet History
+//           </button>
+//           <button
+//             onClick={() => setActiveTab("topWins")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "topWins"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Top 10 Wins
+//           </button>
+//         </div>
+//         <div>
+//           {activeTab === "activeBet" && <ActiveBet userActiveBets={userActiveBets} />}
+//           {activeTab === "betHistory" && (
+//             <div className="bg-green-100 rounded-lg p-4">
+//               <UserBets />
+//             </div>
+//           )}
+//           {activeTab === "topWins" && (
+//             <div className="bg-purple-100 rounded-lg p-4">
+//               <TopWinsBets />
+//             </div>
+//           )}
+//         </div>
+//       </div>
+
+//       {/* Toast Notifications */}
+//       <ToastContainerWrapper />
+//     </div>
+//   );
+// }
+// // src/components/GameRoom.js
+// import React, { useEffect, useState, useRef } from "react";
+// import { useDispatch, useSelector } from "react-redux";
+// import { clearError } from "../features/roundSlice";
+// import useAblyGameRoom from "../hooks/useAblyGameRoom";
+// import BetForm from "./BetForm";
+// import CoinFlip from "./CoinFlip";
+// import UserBets from "./UserBets"; // Bet History Component
+// import TopWinsBets from "./TopWinsBets"; // Top Wins Component
+// import ActiveBet from "./ActiveBet"; // Active Bet Component
+// import BetUpdates from "./BetUpdates"; // Bet Updates Component
+// import RoundHistory from "./RoundHistory"; // Round History Component
+// import { toast } from "react-toastify";
+// import ToastContainerWrapper from "./ToastContainerWrapper";
+
+// // Helper function to convert error objects to strings
+// function getErrorMessage(err) {
+//   if (!err) return "";
+//   if (typeof err === "string") return err;
+//   if (err.message) return err.message;
+//   if (err.error)
+//     return typeof err.error === "string"
+//       ? err.error
+//       : JSON.stringify(err.error);
+//   return JSON.stringify(err);
+// }
+
+// export default function GameRoom() {
+//   const dispatch = useDispatch();
+
+//   // Redux state
+//   const { currentRound, jackpot, betResults = [], loading, error } =
+//     useSelector((state) => state.round);
+//   const authUser = useSelector((state) => state.auth.user);
+
+//   const [timeLeft, setTimeLeft] = useState(0);
+//   const timerRef = useRef(null);
+
+//   // Track the active tab for bet displays
+//   const [activeTab, setActiveTab] = useState("activeBet");
+
+//   // Track when the coin flip animation has completed
+//   const [flipComplete, setFlipComplete] = useState(false);
+
+//   // Local state to store the last result (updated after coin flip)
+//   const [lastResult, setLastResult] = useState("N/A");
+
+//   // Initialize realtime updates
+//   useAblyGameRoom();
+
+//   // Reset coin flip status whenever we get a new round
+//   useEffect(() => {
+//     if (currentRound) {
+//       console.log("New round received; resetting flipComplete");
+//       setFlipComplete(false);
+//     }
+//   }, [currentRound]);
+
+//   /**
+//    * Countdown Timer for Active Round:
+//    * - Uses currentRound.endTime for the time-left display.
+//    */
+//   useEffect(() => {
+//     if (!currentRound || currentRound.outcome !== null) {
+//       setTimeLeft(0);
+//       if (timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//       return;
+//     }
+
+//     const endTime = new Date(currentRound.endTime).getTime();
+
+//     const updateTime = () => {
+//       const now = Date.now();
+//       const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
+//       setTimeLeft(remaining);
+
+//       // If time is up, clear the interval
+//       if (remaining <= 0 && timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//     };
+
+//     updateTime(); // set initial
+//     timerRef.current = setInterval(updateTime, 1000);
+
+//     return () => {
+//       if (timerRef.current) clearInterval(timerRef.current);
+//     };
+//   }, [currentRound]);
+
+//   // Extract and display errors from Redux state
+//   const errorMsg = getErrorMessage(error);
+
+//   useEffect(() => {
+//     if (errorMsg) {
+//       // Check if it's a concurrency / duplicate key error (common with many simultaneous bets)
+//       if (errorMsg.includes("E11000")) {
+//         toast.error("Multiple simultaneous bets encountered. Please try again!");
+//       } else {
+//         // Otherwise, just display the error normally
+//         toast.error(errorMsg);
+//       }
+
+//       // Clear the error from Redux so we don't keep re-displaying it
+//       dispatch(clearError());
+//     }
+//   }, [errorMsg, dispatch]);
+
+//   /**
+//    * Notify user about bet result after round ends
+//    * - Relies on betResults updating in Redux
+//    */
+//   useEffect(() => {
+//     if (!authUser || !currentRound || currentRound.outcome === null) return;
+
+//     const userIdentifier = authUser.phone || authUser._id;
+//     if (!userIdentifier) return;
+
+//     const localStorageKey = `notifiedBets_${userIdentifier}`;
+//     const userBets = betResults.filter((bet) => {
+//       const betRound = bet.gameRound || bet.roundId;
+//       if (betRound !== currentRound._id) return false;
+
+//       // Compare phone if present, else compare user ID
+//       if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
+//       if (!bet.phone && authUser._id) return bet.user === authUser._id;
+//       return false;
+//     });
+
+//     let storedNotifiedBets = [];
+//     try {
+//       storedNotifiedBets =
+//         JSON.parse(localStorage.getItem(localStorageKey)) || [];
+//     } catch (err) {
+//       console.error("Error parsing localStorage for notified bets:", err);
+//     }
+
+//     userBets.forEach((bet) => {
+//       if (!bet.betId) return;
+//       if (!storedNotifiedBets.includes(bet.betId) && bet.result) {
+//         if (bet.result === "win") {
+//           toast.success(`Congratulations! You won Ksh${bet.amount}!`);
+//         } else if (bet.result === "loss" || bet.result === "lost") {
+//           toast.error(
+//             `Sorry, your bet of Ksh${bet.betAmount} lost Ksh${bet.amount}.`
+//           );
+//         }
+//         storedNotifiedBets.push(bet.betId);
+//       }
+//     });
+
+//     localStorage.setItem(localStorageKey, JSON.stringify(storedNotifiedBets));
+//   }, [betResults, currentRound, authUser]);
+
+//   // Filter bets by side for the current round
+//   const currentRoundId = currentRound ? currentRound._id : null;
+//   const headBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "heads" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+//   const tailBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "tails" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+
+//   // Filter the signed-in user's active bets
+//   const userActiveBets =
+//     authUser && currentRound && currentRound.outcome === null
+//       ? betResults.filter((bet) => {
+//           const betRound = bet.gameRound || bet.roundId;
+//           if (betRound !== currentRound._id) return false;
+
+//           if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
+//           if (!bet.phone && authUser._id) return bet.user === authUser._id;
+//           return false;
+//         })
+//       : [];
+
+//   // For "No Active Round" checks
+//   const noActiveRoundError =
+//     errorMsg.toLowerCase().includes("no active round") ||
+//     (!loading && !currentRound);
+
+//   return (
+//     <div className="max-w-6xl mx-auto p-6">
+//       <h1 className="text-3xl font-extrabold text-center mb-6">
+//         Coin Flip Betting Game
+//       </h1>
+
+//       {loading && <p className="text-center text-gray-600">Loading...</p>}
+
+//       {/* If the server says there's no active round, or if currentRound is null */}
+//       {noActiveRoundError ? (
+//         <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center text-red-700 mb-6">
+//           <p className="text-xl font-semibold">No Active Round Available</p>
+//           <p className="mt-2">
+//             Betting is currently unavailable because there is no active round.
+//             Please check back later or refresh the page.
+//           </p>
+//         </div>
+//       ) : currentRound && currentRound.outcome === null ? (
+//         // Active round
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} (Active)
+//           </h2>
+//           <div className="flex flex-col md:flex-row md:justify-between mb-4">
+//             <p className="text-lg">
+//               <span className="font-medium">Time Left:</span> {timeLeft}s
+//             </p>
+//           </div>
+//           <CoinFlip round={currentRound} />
+//           {/* Only allow bets if current time < countdownEndTime */}
+//           {Date.now() < new Date(currentRound.countdownEndTime).getTime() ? (
+//             <BetForm roundId={currentRound._id} />
+//           ) : (
+//             <p className="text-red-600 mt-2 font-semibold">
+//               Betting is closed.
+//             </p>
+//           )}
+//         </div>
+//       ) : currentRound && currentRound.outcome ? (
+//         // Ended round
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} Ended!
+//           </h2>
+//           {flipComplete && (
+//             <p className="text-lg mb-4">
+//               <span className="font-medium">Outcome:</span>{" "}
+//               {currentRound.outcome}
+//             </p>
+//           )}
+//           <CoinFlip
+//             round={currentRound}
+//             onFlipComplete={() => {
+//               console.log("Flip complete callback triggered");
+//               setLastResult(currentRound.outcome);
+//               setFlipComplete(true);
+//               toast.info(
+//                 `Round ${currentRound.roundNumber} ended with outcome: ${currentRound.outcome}`
+//               );
+//             }}
+//           />
+//           <p className="mt-4 text-gray-700">
+//             Please wait for the next round to start...
+//           </p>
+//         </div>
+//       ) : null}
+
+//       {/* Jackpot Section */}
+//       <div className="bg-yellow-100 rounded-lg p-4 mb-6 text-center">
+//         <h3 className="text-xl font-bold">
+//           Jackpot: {Number(jackpot || 0).toFixed(2)}
+//         </h3>
+//       </div>
+
+//       {/* Additional Components */}
+//       <BetUpdates headBets={headBets} tailBets={tailBets} />
+//       <RoundHistory />
+
+//       {/* Tabbed Navigation */}
+//       <div className="mt-8">
+//         <div className="flex justify-center mb-4 space-x-4">
+//           <button
+//             onClick={() => setActiveTab("activeBet")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "activeBet"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Your Active Bet
+//           </button>
+//           <button
+//             onClick={() => setActiveTab("betHistory")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "betHistory"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Your Bet History
+//           </button>
+//           <button
+//             onClick={() => setActiveTab("topWins")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "topWins"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Top 10 Wins
+//           </button>
+//         </div>
+//         <div>
+//           {activeTab === "activeBet" && <ActiveBet userActiveBets={userActiveBets} />}
+//           {activeTab === "betHistory" && (
+//             <div className="bg-green-100 rounded-lg p-4">
+//               <UserBets />
+//             </div>
+//           )}
+//           {activeTab === "topWins" && (
+//             <div className="bg-purple-100 rounded-lg p-4">
+//               <TopWinsBets />
+//             </div>
+//           )}
+//         </div>
+//       </div>
+
+//       {/* Toast Notifications */}
+//       <ToastContainerWrapper />
+//     </div>
+//   );
+// }
+
+
+
+
+// // // // src/components/GameRoom.js
+// // src/components/GameRoom.js
+// import React, { useEffect, useState, useRef } from "react";
+// import { useDispatch, useSelector } from "react-redux";
+// import { clearError } from "../features/roundSlice";
+// import useAblyGameRoom from "../hooks/useAblyGameRoom";
+// import BetForm from "./BetForm";
+// import CoinFlip from "./CoinFlip";
+// import UserBets from "./UserBets"; // Bet History Component
+// import TopWinsBets from "./TopWinsBets"; // Top Wins Component
+// import ActiveBet from "./ActiveBet"; // Active Bet Component
+// import BetUpdates from "./BetUpdates"; // Bet Updates Component
+// import RoundHistory from "./RoundHistory"; // Round History Component
+// import { toast } from "react-toastify";
+// import ToastContainerWrapper from "./ToastContainerWrapper";
+
+// // Helper function to convert error objects to strings
+// function getErrorMessage(err) {
+//   if (!err) return "";
+//   if (typeof err === "string") return err;
+//   if (err.message) return err.message;
+//   if (err.error)
+//     return typeof err.error === "string"
+//       ? err.error
+//       : JSON.stringify(err.error);
+//   return JSON.stringify(err);
+// }
+
+// export default function GameRoom() {
+//   const dispatch = useDispatch();
+
+//   // Redux state
+//   const { currentRound, jackpot, betResults = [], loading, error } =
+//     useSelector((state) => state.round);
+//   const authUser = useSelector((state) => state.auth.user);
+
+//   const [timeLeft, setTimeLeft] = useState(0);
+//   const timerRef = useRef(null);
+
+//   // Track the active tab for bet displays
+//   const [activeTab, setActiveTab] = useState("activeBet");
+
+//   // Track when the coin flip animation has completed
+//   const [flipComplete, setFlipComplete] = useState(false);
+
+//   // Local state to store the last result (updated after coin flip)
+//   const [lastResult, setLastResult] = useState("N/A");
+
+//   // Initialize realtime updates
+//   useAblyGameRoom();
+
+//   // Reset coin flip status whenever we get a new round
+//   useEffect(() => {
+//     if (currentRound) {
+//       console.log("New round received; resetting flipComplete");
+//       setFlipComplete(false);
+//     }
+//   }, [currentRound]);
+
+//   /**
+//    * Countdown Timer for Active Round:
+//    * - Uses currentRound.endTime for the time-left display.
+//    */
+//   useEffect(() => {
+//     if (!currentRound || currentRound.outcome !== null) {
+//       setTimeLeft(0);
+//       if (timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//       return;
+//     }
+
+//     const endTime = new Date(currentRound.endTime).getTime();
+
+//     const updateTime = () => {
+//       const now = Date.now();
+//       const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
+//       setTimeLeft(remaining);
+
+//       // If time is up, clear the interval
+//       if (remaining <= 0 && timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//     };
+
+//     updateTime(); // set initial
+//     timerRef.current = setInterval(updateTime, 1000);
+
+//     return () => {
+//       if (timerRef.current) clearInterval(timerRef.current);
+//     };
+//   }, [currentRound]);
+
+//   // Convert Redux error into a string
+//   const errorMsg = getErrorMessage(error);
+
+//   // Display errors with proper messaging
+//   useEffect(() => {
+//     if (errorMsg) {
+//       // Check if it's a duplicate bet error by matching known strings
+//       if (
+//         errorMsg.toLowerCase().includes("bet already exists") ||
+//         errorMsg.toLowerCase().includes("duplicate")
+//       ) {
+//         toast.error("You've already placed a bet for this round. Please wait for the next round.");
+//       } else if (errorMsg.includes("E11000")) {
+//         // Check for concurrency / duplicate key error from MongoDB
+//         toast.error("Multiple simultaneous bets encountered. Please try again!");
+//       } else {
+//         // Otherwise, just display the error normally
+//         toast.error(errorMsg);
+//       }
+
+//       // Clear the error from Redux so we don't keep re-displaying it
+//       dispatch(clearError());
+//     }
+//   }, [errorMsg, dispatch]);
+
+//   /**
+//    * Notify user about bet result after round ends
+//    * - Relies on betResults updating in Redux
+//    */
+//   useEffect(() => {
+//     if (!authUser || !currentRound || currentRound.outcome === null) return;
+
+//     const userIdentifier = authUser.phone || authUser._id;
+//     if (!userIdentifier) return;
+
+//     const localStorageKey = `notifiedBets_${userIdentifier}`;
+//     const userBets = betResults.filter((bet) => {
+//       const betRound = bet.gameRound || bet.roundId;
+//       if (betRound !== currentRound._id) return false;
+
+//       // Compare phone if present, else compare user ID
+//       if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
+//       if (!bet.phone && authUser._id) return bet.user === authUser._id;
+//       return false;
+//     });
+
+//     let storedNotifiedBets = [];
+//     try {
+//       storedNotifiedBets =
+//         JSON.parse(localStorage.getItem(localStorageKey)) || [];
+//     } catch (err) {
+//       console.error("Error parsing localStorage for notified bets:", err);
+//     }
+
+//     userBets.forEach((bet) => {
+//       if (!bet.betId) return;
+//       if (!storedNotifiedBets.includes(bet.betId) && bet.result) {
+//         if (bet.result === "win") {
+//           toast.success(`Congratulations! You won Ksh${bet.amount}!`);
+//         } else if (bet.result === "loss" || bet.result === "lost") {
+//           toast.error(
+//             `Sorry, your bet of Ksh${bet.betAmount} lost Ksh${bet.amount}.`
+//           );
+//         }
+//         storedNotifiedBets.push(bet.betId);
+//       }
+//     });
+
+//     localStorage.setItem(localStorageKey, JSON.stringify(storedNotifiedBets));
+//   }, [betResults, currentRound, authUser]);
+
+//   // Filter bets by side for the current round
+//   const currentRoundId = currentRound ? currentRound._id : null;
+//   const headBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "heads" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+//   const tailBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "tails" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+
+//   // Filter the signed-in user's active bets
+//   const userActiveBets =
+//     authUser && currentRound && currentRound.outcome === null
+//       ? betResults.filter((bet) => {
+//           const betRound = bet.gameRound || bet.roundId;
+//           if (betRound !== currentRound._id) return false;
+
+//           if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
+//           if (!bet.phone && authUser._id) return bet.user === authUser._id;
+//           return false;
+//         })
+//       : [];
+
+//   // For "No Active Round" checks
+//   const noActiveRoundError =
+//     errorMsg.toLowerCase().includes("no active round") ||
+//     (!loading && !currentRound);
+
+//   return (
+//     <div className="max-w-6xl mx-auto p-6">
+//       <h1 className="text-3xl font-extrabold text-center mb-6">
+//         Coin Flip Betting Game
+//       </h1>
+
+//       {loading && <p className="text-center text-gray-600">Loading...</p>}
+
+//       {/* If the server says there's no active round, or if currentRound is null */}
+//       {noActiveRoundError ? (
+//         <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center text-red-700 mb-6">
+//           <p className="text-xl font-semibold">No Active Round Available</p>
+//           <p className="mt-2">
+//             Betting is currently unavailable because there is no active round.
+//             Please check back later or refresh the page.
+//           </p>
+//         </div>
+//       ) : currentRound && currentRound.outcome === null ? (
+//         // Active round
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} (Active)
+//           </h2>
+//           <div className="flex flex-col md:flex-row md:justify-between mb-4">
+//             <p className="text-lg">
+//               <span className="font-medium">Time Left:</span> {timeLeft}s
+//             </p>
+//           </div>
+//           <CoinFlip round={currentRound} />
+//           {/* Only allow bets if current time < countdownEndTime */}
+//           {Date.now() < new Date(currentRound.countdownEndTime).getTime() ? (
+//             <BetForm roundId={currentRound._id} />
+//           ) : (
+//             <p className="text-red-600 mt-2 font-semibold">
+//               Betting is closed.
+//             </p>
+//           )}
+//         </div>
+//       ) : currentRound && currentRound.outcome ? (
+//         // Ended round
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} Ended!
+//           </h2>
+//           {flipComplete && (
+//             <p className="text-lg mb-4">
+//               <span className="font-medium">Outcome:</span>{" "}
+//               {currentRound.outcome}
+//             </p>
+//           )}
+//           <CoinFlip
+//             round={currentRound}
+//             onFlipComplete={() => {
+//               console.log("Flip complete callback triggered");
+//               setLastResult(currentRound.outcome);
+//               setFlipComplete(true);
+//               toast.info(
+//                 `Round ${currentRound.roundNumber} ended with outcome: ${currentRound.outcome}`
+//               );
+//             }}
+//           />
+//           <p className="mt-4 text-gray-700">
+//             Please wait for the next round to start...
+//           </p>
+//         </div>
+//       ) : null}
+
+//       {/* Jackpot Section */}
+//       <div className="bg-yellow-100 rounded-lg p-4 mb-6 text-center">
+//         <h3 className="text-xl font-bold">
+//           Jackpot: {Number(jackpot || 0).toFixed(2)}
+//         </h3>
+//       </div>
+
+//       {/* Additional Components */}
+//       <BetUpdates headBets={headBets} tailBets={tailBets} />
+//       <RoundHistory />
+
+//       {/* Tabbed Navigation */}
+//       <div className="mt-8">
+//         <div className="flex justify-center mb-4 space-x-4">
+//           <button
+//             onClick={() => setActiveTab("activeBet")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "activeBet"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Your Active Bet
+//           </button>
+//           <button
+//             onClick={() => setActiveTab("betHistory")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "betHistory"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Your Bet History
+//           </button>
+//           <button
+//             onClick={() => setActiveTab("topWins")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "topWins"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Top 10 Wins
+//           </button>
+//         </div>
+//         <div>
+//           {activeTab === "activeBet" && <ActiveBet userActiveBets={userActiveBets} />}
+//           {activeTab === "betHistory" && (
+//             <div className="bg-green-100 rounded-lg p-4">
+//               <UserBets />
+//             </div>
+//           )}
+//           {activeTab === "topWins" && (
+//             <div className="bg-purple-100 rounded-lg p-4">
+//               <TopWinsBets />
+//             </div>
+//           )}
+//         </div>
+//       </div>
+
+//       {/* Toast Notifications */}
+//       <ToastContainerWrapper />
+//     </div>
+//   );
+// }
+
+// // src/components/GameRoom.js
+// import React, { useEffect, useState, useRef } from "react";
+// import { useDispatch, useSelector } from "react-redux";
+// import { clearError } from "../features/roundSlice";
+// import useAblyGameRoom from "../hooks/useAblyGameRoom";
+// import BetForm from "./BetForm";
+// import CoinFlip from "./CoinFlip";
+// import UserBets from "./UserBets"; // Bet History Component
+// import TopWinsBets from "./TopWinsBets"; // Top Wins Component
+// import ActiveBet from "./ActiveBet"; // Active Bet Component
+// import BetUpdates from "./BetUpdates"; // Bet Updates Component
+// import RoundHistory from "./RoundHistory"; // Round History Component
+// import { toast } from "react-toastify";
+// import ToastContainerWrapper from "./ToastContainerWrapper";
+
+// // Helper function to convert error objects to strings
+// function getErrorMessage(err) {
+//   if (!err) return "";
+//   if (typeof err === "string") return err;
+//   if (err.message) return err.message;
+//   if (err.error)
+//     return typeof err.error === "string"
+//       ? err.error
+//       : JSON.stringify(err.error);
+//   return JSON.stringify(err);
+// }
+
+// export default function GameRoom() {
+//   const dispatch = useDispatch();
+
+//   // Redux state
+//   const { currentRound, jackpot, betResults = [], loading, error } =
+//     useSelector((state) => state.round);
+//   const authUser = useSelector((state) => state.auth.user);
+
+//   const [timeLeft, setTimeLeft] = useState(0);
+//   const timerRef = useRef(null);
+
+//   // Track the active tab for bet displays
+//   const [activeTab, setActiveTab] = useState("activeBet");
+
+//   // Track when the coin flip animation has completed
+//   const [flipComplete, setFlipComplete] = useState(false);
+
+//   // Local state to store the last result (updated after coin flip)
+//   const [lastResult, setLastResult] = useState("N/A");
+
+//   // Initialize realtime updates
+//   useAblyGameRoom();
+
+//   // Reset coin flip status whenever we get a new round
+//   useEffect(() => {
+//     if (currentRound) {
+//       console.log("New round received; resetting flipComplete");
+//       setFlipComplete(false);
+//     }
+//   }, [currentRound]);
+
+//   /**
+//    * Countdown Timer for Active Round:
+//    * - Uses currentRound.endTime for the time-left display.
+//    */
+//   useEffect(() => {
+//     if (!currentRound || currentRound.outcome !== null) {
+//       setTimeLeft(0);
+//       if (timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//       return;
+//     }
+
+//     const endTime = new Date(currentRound.endTime).getTime();
+
+//     const updateTime = () => {
+//       const now = Date.now();
+//       const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
+//       setTimeLeft(remaining);
+
+//       // If time is up, clear the interval
+//       if (remaining <= 0 && timerRef.current) {
+//         clearInterval(timerRef.current);
+//         timerRef.current = null;
+//       }
+//     };
+
+//     updateTime(); // set initial
+//     timerRef.current = setInterval(updateTime, 1000);
+
+//     return () => {
+//       if (timerRef.current) clearInterval(timerRef.current);
+//     };
+//   }, [currentRound]);
+
+//   // Extract and display errors from Redux state
+//   const errorMsg = getErrorMessage(error);
+
+//   useEffect(() => {
+//     if (errorMsg) {
+//       // Check if it's a concurrency / duplicate key error (common with many simultaneous bets)
+//       if (errorMsg.includes("E11000")) {
+//         toast.error("Multiple simultaneous bets encountered. Please try again!");
+//       } else {
+//         // Otherwise, just display the error normally
+//         toast.error(errorMsg);
+//       }
+
+//       // Clear the error from Redux so we don't keep re-displaying it
+//       dispatch(clearError());
+//     }
+//   }, [errorMsg, dispatch]);
+
+//   /**
+//    * Notify user about bet result after round ends
+//    * - Relies on betResults updating in Redux
+//    */
+//   useEffect(() => {
+//     if (!authUser || !currentRound || currentRound.outcome === null) return;
+
+//     const userIdentifier = authUser.phone || authUser._id;
+//     if (!userIdentifier) return;
+
+//     const localStorageKey = `notifiedBets_${userIdentifier}`;
+//     const userBets = betResults.filter((bet) => {
+//       const betRound = bet.gameRound || bet.roundId;
+//       if (betRound !== currentRound._id) return false;
+
+//       // Compare phone if present, else compare user ID
+//       if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
+//       if (!bet.phone && authUser._id) return bet.user === authUser._id;
+//       return false;
+//     });
+
+//     let storedNotifiedBets = [];
+//     try {
+//       storedNotifiedBets =
+//         JSON.parse(localStorage.getItem(localStorageKey)) || [];
+//     } catch (err) {
+//       console.error("Error parsing localStorage for notified bets:", err);
+//     }
+
+//     userBets.forEach((bet) => {
+//       if (!bet.betId) return;
+//       if (!storedNotifiedBets.includes(bet.betId) && bet.result) {
+//         if (bet.result === "win") {
+//           toast.success(`Congratulations! You won Ksh${bet.amount}!`);
+//         } else if (bet.result === "loss" || bet.result === "lost") {
+//           toast.error(
+//             `Sorry, your bet of Ksh${bet.betAmount} lost Ksh${bet.amount}.`
+//           );
+//         }
+//         storedNotifiedBets.push(bet.betId);
+//       }
+//     });
+
+//     localStorage.setItem(localStorageKey, JSON.stringify(storedNotifiedBets));
+//   }, [betResults, currentRound, authUser]);
+
+//   // Filter bets by side for the current round
+//   const currentRoundId = currentRound ? currentRound._id : null;
+//   const headBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "heads" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+//   const tailBets = currentRoundId
+//     ? betResults.filter(
+//         (bet) =>
+//           bet.side === "tails" &&
+//           (bet.gameRound || bet.roundId) === currentRoundId
+//       )
+//     : [];
+
+//   // Filter the signed-in user's active bets
+//   const userActiveBets =
+//     authUser && currentRound && currentRound.outcome === null
+//       ? betResults.filter((bet) => {
+//           const betRound = bet.gameRound || bet.roundId;
+//           if (betRound !== currentRound._id) return false;
+
+//           if (bet.phone && authUser.phone) return bet.phone === authUser.phone;
+//           if (!bet.phone && authUser._id) return bet.user === authUser._id;
+//           return false;
+//         })
+//       : [];
+
+//   // For "No Active Round" checks
+//   const noActiveRoundError =
+//     errorMsg.toLowerCase().includes("no active round") ||
+//     (!loading && !currentRound);
+
+//   return (
+//     <div className="max-w-6xl mx-auto p-6">
+//       <h1 className="text-3xl font-extrabold text-center mb-6">
+//         Coin Flip Betting Game
+//       </h1>
+
+//       {loading && <p className="text-center text-gray-600">Loading...</p>}
+
+//       {/* If the server says there's no active round, or if currentRound is null */}
+//       {noActiveRoundError ? (
+//         <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center text-red-700 mb-6">
+//           <p className="text-xl font-semibold">No Active Round Available</p>
+//           <p className="mt-2">
+//             Betting is currently unavailable because there is no active round.
+//             Please check back later or refresh the page.
+//           </p>
+//         </div>
+//       ) : currentRound && currentRound.outcome === null ? (
+//         // Active round
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} (Active)
+//           </h2>
+//           <div className="flex flex-col md:flex-row md:justify-between mb-4">
+//             <p className="text-lg">
+//               <span className="font-medium">Time Left:</span> {timeLeft}s
+//             </p>
+//           </div>
+//           <CoinFlip round={currentRound} />
+//           {/* Only allow bets if current time < countdownEndTime */}
+//           {Date.now() < new Date(currentRound.countdownEndTime).getTime() ? (
+//             <BetForm roundId={currentRound._id} />
+//           ) : (
+//             <p className="text-red-600 mt-2 font-semibold">
+//               Betting is closed.
+//             </p>
+//           )}
+//         </div>
+//       ) : currentRound && currentRound.outcome ? (
+//         // Ended round
+//         <div className="bg-white rounded-lg shadow p-6 mb-6">
+//           <h2 className="text-2xl font-semibold mb-2">
+//             Round #{currentRound.roundNumber} Ended!
+//           </h2>
+//           {flipComplete && (
+//             <p className="text-lg mb-4">
+//               <span className="font-medium">Outcome:</span>{" "}
+//               {currentRound.outcome}
+//             </p>
+//           )}
+//           <CoinFlip
+//             round={currentRound}
+//             onFlipComplete={() => {
+//               console.log("Flip complete callback triggered");
+//               setLastResult(currentRound.outcome);
+//               setFlipComplete(true);
+//               toast.info(
+//                 `Round ${currentRound.roundNumber} ended with outcome: ${currentRound.outcome}`
+//               );
+//             }}
+//           />
+//           <p className="mt-4 text-gray-700">
+//             Please wait for the next round to start...
+//           </p>
+//         </div>
+//       ) : null}
+
+//       {/* Jackpot Section */}
+//       <div className="bg-yellow-100 rounded-lg p-4 mb-6 text-center">
+//         <h3 className="text-xl font-bold">
+//           Jackpot: {Number(jackpot || 0).toFixed(2)}
+//         </h3>
+//       </div>
+
+//       {/* Additional Components */}
+//       <BetUpdates headBets={headBets} tailBets={tailBets} />
+//       <RoundHistory />
+
+//       {/* Tabbed Navigation */}
+//       <div className="mt-8">
+//         <div className="flex justify-center mb-4 space-x-4">
+//           <button
+//             onClick={() => setActiveTab("activeBet")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "activeBet"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Your Active Bet
+//           </button>
+//           <button
+//             onClick={() => setActiveTab("betHistory")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "betHistory"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Your Bet History
+//           </button>
+//           <button
+//             onClick={() => setActiveTab("topWins")}
+//             className={`px-4 py-2 border-b-2 ${
+//               activeTab === "topWins"
+//                 ? "border-blue-500 text-blue-500"
+//                 : "border-transparent text-gray-500"
+//             }`}
+//           >
+//             Top 10 Wins
+//           </button>
+//         </div>
+//         <div>
+//           {activeTab === "activeBet" && <ActiveBet userActiveBets={userActiveBets} />}
+//           {activeTab === "betHistory" && (
+//             <div className="bg-green-100 rounded-lg p-4">
+//               <UserBets />
+//             </div>
+//           )}
+//           {activeTab === "topWins" && (
+//             <div className="bg-purple-100 rounded-lg p-4">
+//               <TopWinsBets />
+//             </div>
+//           )}
+//         </div>
+//       </div>
+
+//       {/* Toast Notifications */}
+//       <ToastContainerWrapper />
+//     </div>
+//   );
+// }
 
 // import React, { useEffect, useState, useRef } from "react";
 // import { useDispatch, useSelector } from "react-redux";

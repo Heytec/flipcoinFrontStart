@@ -28,18 +28,61 @@ export const fetchJackpotPool = createAsyncThunk(
   }
 );
 
+// export const placeBet = createAsyncThunk(
+//   "round/placeBet",
+//   async (betData, thunkAPI) => {
+//     try {
+//       const response = await axiosInstance.post("/game/bet", betData);
+//       // expected: { message, bet: [ ... ] }
+//       return response.data;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response?.data || error.message);
+//     }
+//   }
+// );
+
+
+// Error types constant (can be in a separate constants file)
+export const ERROR_TYPES = {
+  NO_ACTIVE_ROUND: 'NO_ACTIVE_ROUND',
+  BETTING_CLOSED: 'BETTING_CLOSED',
+  INVALID_BET_DATA: 'INVALID_BET_DATA',
+  DUPLICATE_BET: 'DUPLICATE_BET',
+  USER_NOT_FOUND: 'USER_NOT_FOUND',
+  INSUFFICIENT_BALANCE: 'INSUFFICIENT_BALANCE',
+  CONCURRENT_REQUEST: 'CONCURRENT_REQUEST',
+  UNKNOWN_ERROR: 'UNKNOWN_ERROR'
+};
+
+// Redux thunk action
 export const placeBet = createAsyncThunk(
   "round/placeBet",
   async (betData, thunkAPI) => {
     try {
       const response = await axiosInstance.post("/game/bet", betData);
-      // expected: { message, bet: [ ... ] }
       return response.data;
     } catch (error) {
-      return thunkAPI.rejectWithValue(error.response?.data || error.message);
+      // Enhanced error handling
+      const errorData = error.response?.data;
+      if (errorData?.type && ERROR_TYPES[errorData.type]) {
+        return thunkAPI.rejectWithValue({
+          type: errorData.type,
+          message: errorData.error,
+          details: errorData.details
+        });
+      }
+      return thunkAPI.rejectWithValue({
+        type: ERROR_TYPES.UNKNOWN_ERROR,
+        message: error.message || 'An unexpected error occurred',
+        details: null
+      });
     }
   }
 );
+
+
+
+
 
 export const startRound = createAsyncThunk(
   "round/startRound",
@@ -118,6 +161,7 @@ const roundSlice = createSlice({
     loading: false,
     error: null,
     lastBet: null,
+    errorDetails: null
   },
   reducers: {
     roundUpdated: (state, action) => {
@@ -147,6 +191,7 @@ const roundSlice = createSlice({
     },
     clearError: (state) => {
       state.error = null;
+      state.errorDetails = null;
     },
   },
   extraReducers: (builder) => {
@@ -183,17 +228,39 @@ const roundSlice = createSlice({
       .addCase(placeBet.pending, (state) => {
         state.loading = true;
         state.error = null;
+        state.errorDetails = null;
       })
       .addCase(placeBet.fulfilled, (state, action) => {
         state.loading = false;
+        state.error = null;
+        state.errorDetails = null;
         const betArray = action.payload.bet;
-        state.lastBet =
-          Array.isArray(betArray) && betArray.length > 0 ? betArray[0] : null;
+        state.lastBet = Array.isArray(betArray) && betArray.length > 0 
+          ? betArray[0] 
+          : null;
       })
       .addCase(placeBet.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload;
+        state.error = action.payload.message;
+        state.errorDetails = {
+          type: action.payload.type,
+          details: action.payload.details
+        };
       })
+      // .addCase(placeBet.pending, (state) => {
+      //   state.loading = true;
+      //   state.error = null;
+      // })
+      // .addCase(placeBet.fulfilled, (state, action) => {
+      //   state.loading = false;
+      //   const betArray = action.payload.bet;
+      //   state.lastBet =
+      //     Array.isArray(betArray) && betArray.length > 0 ? betArray[0] : null;
+      // })
+      // .addCase(placeBet.rejected, (state, action) => {
+      //   state.loading = false;
+      //   state.error = action.payload;
+      // })
       // startRound
       .addCase(startRound.pending, (state) => {
         state.loading = true;

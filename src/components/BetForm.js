@@ -1,15 +1,44 @@
-// // // // // src/components/BetForm.js
+// // // // // // src/components/BetForm.js
+// src/components/BetForm.js
 
-import React, { useState } from 'react';
-import { useDispatch } from 'react-redux';
-import { placeBet } from '../features/roundSlice';
+import React, { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { placeBet, clearError } from '../features/roundSlice';
 import { toast } from 'react-toastify';
+import { ERROR_TYPES } from '../constants/errorTypes';
 
 export default function BetForm({ roundId }) {
   const dispatch = useDispatch();
   const [amount, setAmount] = useState('');
   const [side, setSide] = useState('heads');
-  const suggestedAmounts = [10, 20, 50, 100,200,500];
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const { loading, error, errorDetails } = useSelector(state => state.round);
+  const suggestedAmounts = [10, 20, 50, 100, 200, 500];
+
+  useEffect(() => {
+    // Clear any existing errors when component mounts or unmounts
+    return () => dispatch(clearError());
+  }, [dispatch]);
+
+  const getErrorMessage = (errorDetails) => {
+    if (!errorDetails) return 'An unexpected error occurred';
+
+    switch (errorDetails.type) {
+      case ERROR_TYPES.INSUFFICIENT_BALANCE:
+        return `Insufficient balance. You need ${errorDetails.details.deficit} more coins.`;
+      case ERROR_TYPES.BETTING_CLOSED:
+        return 'Betting is closed for this round.';
+      case ERROR_TYPES.DUPLICATE_BET:
+        return `You already placed a bet of ${errorDetails.details.existingBet.amount} on ${errorDetails.details.existingBet.side} for this round.`;
+      case ERROR_TYPES.INVALID_BET_DATA:
+        return errorDetails.message || 'Invalid bet data provided.';
+      case ERROR_TYPES.NO_ACTIVE_ROUND:
+        return 'No active round available for betting.';
+      default:
+        return errorDetails.message || 'An error occurred while placing your bet.';
+    }
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -17,40 +46,65 @@ export default function BetForm({ roundId }) {
       toast.error('No active round to bet on!');
       return;
     }
+
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
     try {
-      await dispatch(placeBet({ amount, side })).unwrap();
+      const result = await dispatch(placeBet({ 
+        roundId, 
+        amount: parseFloat(amount), 
+        side 
+      })).unwrap();
+      
       toast.success('Your bet has been placed successfully!');
       setAmount('');
+      
+      // Optional: Show additional success details
+      if (result.bet) {
+        toast.info(`Placed ${result.bet.amount} on ${result.bet.side}`);
+      }
     } catch (error) {
-      console.error('Error placing bet:', error);
-      toast.error(`Error placing bet: ${error}`);
+      const errorMessage = getErrorMessage(error);
+      toast.error(errorMessage, {
+        autoClose: 5000,
+        position: 'top-center'
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleSuggestionClick = (value) => {
-    setAmount(value);
+    setAmount(value.toString());
+  };
+
+  const handleAmountChange = (e) => {
+    const value = e.target.value;
+    if (value === '' || (/^\d*\.?\d*$/.test(value) && !isNaN(parseFloat(value)))) {
+      setAmount(value);
+    }
   };
 
   return (
     <div className="mt-4 p-4 bg-gray-50 rounded-lg shadow-sm">
-      {/* Centered Form Header */}
       <h2 className="text-xl font-bold mb-4 text-center">Place Your Bet</h2>
 
       <form onSubmit={onSubmit}>
-        {/* Bet Amount Input with Suggestions */}
         <div className="mb-4">
           <label htmlFor="amount" className="block text-gray-700 mb-1 text-center">
             Bet Amount:
           </label>
           <input
             id="amount"
-            type="number"
-            min="1"
+            type="text"
+            inputMode="decimal"
             placeholder="Enter amount"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={handleAmountChange}
             required
-            className="w-full border rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={isSubmitting}
+            className="w-full border rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
           />
           <div className="mt-2 flex flex-wrap justify-center gap-2">
             {suggestedAmounts.map((value) => (
@@ -58,7 +112,8 @@ export default function BetForm({ roundId }) {
                 key={value}
                 type="button"
                 onClick={() => handleSuggestionClick(value)}
-                className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 focus:outline-none"
+                disabled={isSubmitting}
+                className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 focus:outline-none disabled:bg-blue-300"
               >
                 Ksh{value}
               </button>
@@ -66,48 +121,279 @@ export default function BetForm({ roundId }) {
           </div>
         </div>
 
-        {/* Side Selection */}
         <div className="mb-4">
           <span className="block text-gray-700 mb-1 text-center">Choose Side:</span>
           <div className="flex space-x-4">
-            <button
-              type="button"
-              onClick={() => setSide('heads')}
-              className={`flex-1 border rounded p-2 text-center focus:outline-none transition-colors ${
-                side === 'heads'
-                  ? 'bg-green-500 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              Heads
-            </button>
-            <button
-              type="button"
-              onClick={() => setSide('tails')}
-              className={`flex-1 border rounded p-2 text-center focus:outline-none transition-colors ${
-                side === 'tails'
-                  ? 'bg-green-500 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              Tails
-            </button>
+            {['heads', 'tails'].map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setSide(option)}
+                disabled={isSubmitting}
+                className={`flex-1 border rounded p-2 text-center focus:outline-none transition-colors ${
+                  side === option
+                    ? 'bg-green-500 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-100'
+                } disabled:opacity-50`}
+              >
+                {option.charAt(0).toUpperCase() + option.slice(1)}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Submit Button */}
         <div className="flex justify-center">
           <button
             type="submit"
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none"
+            disabled={isSubmitting || loading}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none disabled:bg-green-400 disabled:cursor-not-allowed flex items-center space-x-2"
           >
-            Place Bet
+            {isSubmitting || loading ? (
+              <>
+                <span className="animate-spin">↻</span>
+                <span>Placing Bet...</span>
+              </>
+            ) : (
+              'Place Bet'
+            )}
           </button>
         </div>
       </form>
     </div>
   );
 }
+
+// import React, { useState } from 'react';
+// import { useDispatch } from 'react-redux';
+// import { placeBet } from '../features/roundSlice';
+// import { toast } from 'react-toastify';
+
+// export default function BetForm({ roundId }) {
+//   const dispatch = useDispatch();
+//   const [amount, setAmount] = useState('');
+//   const [side, setSide] = useState('heads');
+//   const suggestedAmounts = [10, 20, 50, 100, 200, 500];
+
+//   const getErrorMessage = (err) => {
+//     if (!err) return '';
+//     if (typeof err === 'string') return err;
+//     if (err.message) return err.message;
+//     if (err.error)
+//       return typeof err.error === 'string' ? err.error : JSON.stringify(err.error);
+//     return JSON.stringify(err);
+//   };
+
+//   const onSubmit = async (e) => {
+//     e.preventDefault();
+
+//     if (!roundId) {
+//       toast.error('No active round to bet on!');
+//       return;
+//     }
+
+//     try {
+//       // Include roundId in the payload
+//       await dispatch(placeBet({ roundId, amount, side })).unwrap();
+//       toast.success('Your bet has been placed successfully!');
+//       setAmount('');
+//     } catch (error) {
+//       console.error('Error placing bet:', error);
+//       const errorMessage = getErrorMessage(error);
+//       toast.error(`Error placing bet: ${errorMessage}`);
+//     }
+//   };
+
+//   const handleSuggestionClick = (value) => {
+//     setAmount(value);
+//   };
+
+//   return (
+//     <div className="mt-4 p-4 bg-gray-50 rounded-lg shadow-sm">
+//       {/* Centered Form Header */}
+//       <h2 className="text-xl font-bold mb-4 text-center">Place Your Bet</h2>
+
+//       <form onSubmit={onSubmit}>
+//         {/* Bet Amount Input with Suggestions */}
+//         <div className="mb-4">
+//           <label htmlFor="amount" className="block text-gray-700 mb-1 text-center">
+//             Bet Amount:
+//           </label>
+//           <input
+//             id="amount"
+//             type="number"
+//             min="1"
+//             placeholder="Enter amount"
+//             value={amount}
+//             onChange={(e) => setAmount(e.target.value)}
+//             required
+//             className="w-full border rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+//           />
+//           <div className="mt-2 flex flex-wrap justify-center gap-2">
+//             {suggestedAmounts.map((value) => (
+//               <button
+//                 key={value}
+//                 type="button"
+//                 onClick={() => handleSuggestionClick(value)}
+//                 className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 focus:outline-none"
+//               >
+//                 Ksh{value}
+//               </button>
+//             ))}
+//           </div>
+//         </div>
+
+//         {/* Side Selection */}
+//         <div className="mb-4">
+//           <span className="block text-gray-700 mb-1 text-center">Choose Side:</span>
+//           <div className="flex space-x-4">
+//             <button
+//               type="button"
+//               onClick={() => setSide('heads')}
+//               className={`flex-1 border rounded p-2 text-center focus:outline-none transition-colors ${
+//                 side === 'heads'
+//                   ? 'bg-green-500 text-white'
+//                   : 'bg-white text-gray-700 hover:bg-gray-100'
+//               }`}
+//             >
+//               Heads
+//             </button>
+//             <button
+//               type="button"
+//               onClick={() => setSide('tails')}
+//               className={`flex-1 border rounded p-2 text-center focus:outline-none transition-colors ${
+//                 side === 'tails'
+//                   ? 'bg-green-500 text-white'
+//                   : 'bg-white text-gray-700 hover:bg-gray-100'
+//               }`}
+//             >
+//               Tails
+//             </button>
+//           </div>
+//         </div>
+
+//         {/* Submit Button */}
+//         <div className="flex justify-center">
+//           <button
+//             type="submit"
+//             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none"
+//           >
+//             Place Bet
+//           </button>
+//         </div>
+//       </form>
+//     </div>
+//   );
+// }
+
+
+// import React, { useState } from 'react';
+// import { useDispatch } from 'react-redux';
+// import { placeBet } from '../features/roundSlice';
+// import { toast } from 'react-toastify';
+
+// export default function BetForm({ roundId }) {
+//   const dispatch = useDispatch();
+//   const [amount, setAmount] = useState('');
+//   const [side, setSide] = useState('heads');
+//   const suggestedAmounts = [10, 20, 50, 100,200,500];
+
+//   const onSubmit = async (e) => {
+//     e.preventDefault();
+//     if (!roundId) {
+//       toast.error('No active round to bet on!');
+//       return;
+//     }
+//     try {
+//       await dispatch(placeBet({ amount, side })).unwrap();
+//       toast.success('Your bet has been placed successfully!');
+//       setAmount('');
+//     } catch (error) {
+//       console.error('Error placing bet:', error);
+//       toast.error(`Error placing bet: ${error}`);
+//     }
+//   };
+
+//   const handleSuggestionClick = (value) => {
+//     setAmount(value);
+//   };
+
+//   return (
+//     <div className="mt-4 p-4 bg-gray-50 rounded-lg shadow-sm">
+//       {/* Centered Form Header */}
+//       <h2 className="text-xl font-bold mb-4 text-center">Place Your Bet</h2>
+
+//       <form onSubmit={onSubmit}>
+//         {/* Bet Amount Input with Suggestions */}
+//         <div className="mb-4">
+//           <label htmlFor="amount" className="block text-gray-700 mb-1 text-center">
+//             Bet Amount:
+//           </label>
+//           <input
+//             id="amount"
+//             type="number"
+//             min="1"
+//             placeholder="Enter amount"
+//             value={amount}
+//             onChange={(e) => setAmount(e.target.value)}
+//             required
+//             className="w-full border rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+//           />
+//           <div className="mt-2 flex flex-wrap justify-center gap-2">
+//             {suggestedAmounts.map((value) => (
+//               <button
+//                 key={value}
+//                 type="button"
+//                 onClick={() => handleSuggestionClick(value)}
+//                 className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 focus:outline-none"
+//               >
+//                 Ksh{value}
+//               </button>
+//             ))}
+//           </div>
+//         </div>
+
+//         {/* Side Selection */}
+//         <div className="mb-4">
+//           <span className="block text-gray-700 mb-1 text-center">Choose Side:</span>
+//           <div className="flex space-x-4">
+//             <button
+//               type="button"
+//               onClick={() => setSide('heads')}
+//               className={`flex-1 border rounded p-2 text-center focus:outline-none transition-colors ${
+//                 side === 'heads'
+//                   ? 'bg-green-500 text-white'
+//                   : 'bg-white text-gray-700 hover:bg-gray-100'
+//               }`}
+//             >
+//               Heads
+//             </button>
+//             <button
+//               type="button"
+//               onClick={() => setSide('tails')}
+//               className={`flex-1 border rounded p-2 text-center focus:outline-none transition-colors ${
+//                 side === 'tails'
+//                   ? 'bg-green-500 text-white'
+//                   : 'bg-white text-gray-700 hover:bg-gray-100'
+//               }`}
+//             >
+//               Tails
+//             </button>
+//           </div>
+//         </div>
+
+//         {/* Submit Button */}
+//         <div className="flex justify-center">
+//           <button
+//             type="submit"
+//             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none"
+//           >
+//             Place Bet
+//           </button>
+//         </div>
+//       </form>
+//     </div>
+//   );
+// }
 
 // import React, { useState } from 'react';
 // import { useDispatch } from 'react-redux';

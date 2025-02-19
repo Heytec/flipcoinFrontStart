@@ -1,17 +1,78 @@
-// // // // // // authSlice.js
-// src/features/authSlice.js
+// authSlice.js 
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axiosInstance from "../app/axiosInstance";
+import { 
+  ERROR_TYPES, 
+  ERROR_MESSAGES, 
+  getErrorMessage, 
+  getErrorSeverity,
+  shouldReportError 
+} from '../constants/errorTypes';
+
+// Auth-specific error types
+const AUTH_ERROR_TYPES = {
+  ...ERROR_TYPES,
+  SEND_OTP_FAILED: 'SEND_OTP_FAILED',
+  VERIFY_OTP_FAILED: 'VERIFY_OTP_FAILED',
+  MISSING_PHONE: 'MISSING_PHONE',
+  INVALID_PHONE: 'INVALID_PHONE',
+  OTP_INVALID: 'OTP_INVALID',
+  OTP_EXPIRED: 'OTP_EXPIRED',
+  USER_EXISTS: 'USER_EXISTS',
+  MISSING_OTP: 'MISSING_OTP',
+  LOGOUT_FAILED: 'LOGOUT_FAILED'
+};
+
+// Helper function to extract and format error details
+const extractError = (error) => {
+  if (error.response?.data?.error) {
+    const { code, message, details } = error.response.data.error;
+    return {
+      message: getErrorMessage(code, details) || message,
+      code,
+      details,
+      severity: getErrorSeverity(code),
+      timestamp: new Date().toISOString(),
+      shouldReport: shouldReportError(code)
+    };
+  }
+
+  if (error.message === 'Network Error') {
+    return {
+      message: ERROR_MESSAGES[ERROR_TYPES.SERVICE_UNAVAILABLE],
+      code: ERROR_TYPES.SERVICE_UNAVAILABLE,
+      severity: 'error',
+      timestamp: new Date().toISOString(),
+      shouldReport: true
+    };
+  }
+
+  return {
+    message: error.message || ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR],
+    code: "UNKNOWN_ERROR",
+    severity: 'error',
+    timestamp: new Date().toISOString(),
+    shouldReport: true
+  };
+};
 
 // Thunk to send OTP
 export const sendOTP = createAsyncThunk(
   "auth/sendOTP",
-  async ({ phone, mode }, thunkAPI) => {
+  async ({ phone, mode }, { rejectWithValue }) => {
     try {
       const response = await axiosInstance.post("/otp/send", { phone, mode });
-      return response.data;
+      return {
+        ...response.data,
+        timestamp: new Date().toISOString()
+      };
     } catch (error) {
-      return thunkAPI.rejectWithValue(error.response.data);
+      const errorData = extractError(error);
+      if (errorData.shouldReport) {
+        console.error('Auth Error:', errorData);
+        // Add your error reporting service here
+      }
+      return rejectWithValue(errorData);
     }
   }
 );
@@ -19,17 +80,51 @@ export const sendOTP = createAsyncThunk(
 // Thunk to verify OTP, then register or login
 export const verifyOTP = createAsyncThunk(
   "auth/verifyOTP",
-  async ({ phone, code, mode }, thunkAPI) => {
+  async ({ phone, code, mode }, { rejectWithValue }) => {
     try {
-      // First, verify the OTP
+      // First verify the OTP
       await axiosInstance.post("/otp/verify", { phone, code });
-      // Then call the appropriate endpoint based on mode
+      // Then, depending on the mode, register or login the user
       const endpoint = mode === "register" ? "/auth/register" : "/auth/login";
       const response = await axiosInstance.post(endpoint, { phone, code });
-      // Expected response: { user, accessToken, refreshToken, message }
-      return response.data;
+      
+      // Extract nested data from the API response.
+      // Our backend response looks like:
+      // { status, message, data: { user, tokens: { accessToken, refreshToken, ... } } }
+      const { user, tokens } = response.data.data;
+      
+      // Return a flattened object so that extraReducers can directly read user and tokens.
+      return {
+        user,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        timestamp: new Date().toISOString()
+      };
     } catch (error) {
-      return thunkAPI.rejectWithValue(error.response.data);
+      const errorData = extractError(error);
+      
+      // Add action suggestions based on error code
+      switch (errorData.code) {
+        case AUTH_ERROR_TYPES.USER_EXISTS:
+          errorData.suggestion = 'Please login instead';
+          errorData.action = 'LOGIN';
+          break;
+        case AUTH_ERROR_TYPES.USER_NOT_FOUND:
+          errorData.suggestion = 'Create a new account';
+          errorData.action = 'REGISTER';
+          break;
+        case AUTH_ERROR_TYPES.OTP_EXPIRED:
+          errorData.suggestion = 'Request a new verification code';
+          errorData.action = 'RESEND_OTP';
+          break;
+      }
+
+      if (errorData.shouldReport) {
+        console.error('Auth Error:', errorData);
+        // Add your error reporting service here
+      }
+      
+      return rejectWithValue(errorData);
     }
   }
 );
@@ -37,28 +132,37 @@ export const verifyOTP = createAsyncThunk(
 // Thunk to perform logout
 export const performLogout = createAsyncThunk(
   "auth/logout",
-  async (_, thunkAPI) => {
+  async (_, { getState, rejectWithValue }) => {
     try {
-      const { refreshToken } = thunkAPI.getState().auth;
+      const { refreshToken } = getState().auth;
       if (!refreshToken) {
-        throw new Error("No refresh token found");
+        throw new Error(ERROR_MESSAGES[AUTH_ERROR_TYPES.UNAUTHORIZED]);
       }
       await axiosInstance.post("/auth/logout", { refreshToken });
-      return true;
+      return { success: true, timestamp: new Date().toISOString() };
     } catch (error) {
-      return thunkAPI.rejectWithValue(error.response?.data || error.message);
+      const errorData = extractError(error);
+      if (errorData.shouldReport) {
+        console.error('Auth Error:', errorData);
+        // Add your error reporting service here
+      }
+      return rejectWithValue(errorData);
     }
   }
 );
 
-// Initial auth state
+// Initial state
 const initialState = {
   user: null,
   balance: null,
-  accessToken: null,
-  refreshToken: null,
+  accessToken: localStorage.getItem("accessToken"),
+  refreshToken: localStorage.getItem("refreshToken"),
   loading: false,
   error: null,
+  lastAction: null,
+  lastActionTimestamp: null,
+  authStatus: 'idle', // 'idle' | 'pending' | 'authenticated' | 'failed'
+  retryCount: 0
 };
 
 const authSlice = createSlice({
@@ -75,12 +179,16 @@ const authSlice = createSlice({
         state.user.balance = action.payload;
       }
     },
-    // Synchronous logout clears auth state and tokens
+    clearError(state) {
+      state.error = null;
+      state.retryCount = 0;
+    },
     logout(state) {
-      state.user = null;
-      state.balance = null;
-      state.accessToken = null;
-      state.refreshToken = null;
+      Object.assign(state, {
+        ...initialState,
+        accessToken: null,
+        refreshToken: null
+      });
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
     },
@@ -91,18 +199,27 @@ const authSlice = createSlice({
       .addCase(sendOTP.pending, (state) => {
         state.loading = true;
         state.error = null;
+        state.lastAction = 'SEND_OTP';
+        state.authStatus = 'pending';
       })
-      .addCase(sendOTP.fulfilled, (state) => {
+      .addCase(sendOTP.fulfilled, (state, action) => {
         state.loading = false;
+        state.lastActionTimestamp = action.payload.timestamp;
+        state.authStatus = 'otp_sent';
+        state.retryCount = 0;
       })
       .addCase(sendOTP.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload || "Failed to send OTP";
+        state.error = action.payload;
+        state.authStatus = 'failed';
+        state.retryCount += 1;
       })
       // verifyOTP
       .addCase(verifyOTP.pending, (state) => {
         state.loading = true;
         state.error = null;
+        state.lastAction = 'VERIFY_OTP';
+        state.authStatus = 'pending';
       })
       .addCase(verifyOTP.fulfilled, (state, action) => {
         state.loading = false;
@@ -110,32 +227,342 @@ const authSlice = createSlice({
         state.balance = action.payload.user.balance;
         state.accessToken = action.payload.accessToken;
         state.refreshToken = action.payload.refreshToken;
-        // Save tokens to localStorage for later use by axios interceptor
+        state.lastActionTimestamp = action.payload.timestamp;
+        state.authStatus = 'authenticated';
+        state.retryCount = 0;
+        
         localStorage.setItem("accessToken", action.payload.accessToken);
         localStorage.setItem("refreshToken", action.payload.refreshToken);
       })
       .addCase(verifyOTP.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload || "OTP verification failed";
+        state.error = action.payload;
+        state.authStatus = 'failed';
+        state.retryCount += 1;
       })
       // performLogout
       .addCase(performLogout.pending, (state) => {
         state.loading = true;
         state.error = null;
+        state.lastAction = 'LOGOUT';
       })
-      .addCase(performLogout.fulfilled, (state) => {
+      .addCase(performLogout.fulfilled, (state, action) => {
         state.loading = false;
-        // Tokens will be cleared in the logout reducer
+        state.lastActionTimestamp = action.payload.timestamp;
+        // Full logout will be handled by the synchronous logout reducer
       })
       .addCase(performLogout.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload || "Logout failed";
+        state.error = action.payload;
+        // Still perform logout even if API call fails
+        state.user = null;
+        state.balance = null;
+        state.accessToken = null;
+        state.refreshToken = null;
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
       });
   },
 });
 
-export const { updateAccessToken, updateBalance, logout } = authSlice.actions;
+// Selectors
+export const selectAuthError = (state) => state.auth.error;
+export const selectAuthStatus = (state) => state.auth.authStatus;
+export const selectIsAuthenticated = (state) => Boolean(state.auth.accessToken);
+export const selectCanRetry = (state) => state.auth.retryCount < 3;
+export const selectUser = (state) => state.auth.user;
+export const selectBalance = (state) => state.auth.balance;
+
+export const { 
+  updateAccessToken, 
+  updateBalance, 
+  clearError, 
+  logout 
+} = authSlice.actions;
+
 export default authSlice.reducer;
+
+// src/features/authSlice.js
+// import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+// import axiosInstance from "../app/axiosInstance";
+
+// // Helper function to extract error details from the response
+// const extractError = (error) =>
+//   error.response?.data?.error || { message: error.message, code: "UNKNOWN_ERROR" };
+
+// // Thunk to send OTP
+// export const sendOTP = createAsyncThunk(
+//   "auth/sendOTP",
+//   async ({ phone, mode }, thunkAPI) => {
+//     try {
+//       const response = await axiosInstance.post("/otp/send", { phone, mode });
+//       return response.data;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(extractError(error));
+//     }
+//   }
+// );
+
+// // Thunk to verify OTP, then register or login
+// export const verifyOTP = createAsyncThunk(
+//   "auth/verifyOTP",
+//   async ({ phone, code, mode }, thunkAPI) => {
+//     try {
+//       // First, verify the OTP
+//       await axiosInstance.post("/otp/verify", { phone, code });
+//       // Then call the appropriate endpoint based on mode
+//       const endpoint = mode === "register" ? "/auth/register" : "/auth/login";
+//       const response = await axiosInstance.post(endpoint, { phone, code });
+//       // Expected response: { user, accessToken, refreshToken, message }
+//       return response.data;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(extractError(error));
+//     }
+//   }
+// );
+
+// // Thunk to perform logout
+// export const performLogout = createAsyncThunk(
+//   "auth/logout",
+//   async (_, thunkAPI) => {
+//     try {
+//       const { refreshToken } = thunkAPI.getState().auth;
+//       if (!refreshToken) {
+//         throw new Error("No refresh token found");
+//       }
+//       await axiosInstance.post("/auth/logout", { refreshToken });
+//       return true;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(extractError(error));
+//     }
+//   }
+// );
+
+// // Initial auth state
+// const initialState = {
+//   user: null,
+//   balance: null,
+//   accessToken: null,
+//   refreshToken: null,
+//   loading: false,
+//   // error will hold an object { message, code } from the backend
+//   error: null,
+// };
+
+// const authSlice = createSlice({
+//   name: "auth",
+//   initialState,
+//   reducers: {
+//     updateAccessToken(state, action) {
+//       state.accessToken = action.payload;
+//       localStorage.setItem("accessToken", action.payload);
+//     },
+//     updateBalance(state, action) {
+//       state.balance = action.payload;
+//       if (state.user) {
+//         state.user.balance = action.payload;
+//       }
+//     },
+//     // Synchronous logout clears auth state and tokens
+//     logout(state) {
+//       state.user = null;
+//       state.balance = null;
+//       state.accessToken = null;
+//       state.refreshToken = null;
+//       state.error = null;
+//       localStorage.removeItem("accessToken");
+//       localStorage.removeItem("refreshToken");
+//     },
+//   },
+//   extraReducers: (builder) => {
+//     builder
+//       // sendOTP
+//       .addCase(sendOTP.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(sendOTP.fulfilled, (state) => {
+//         state.loading = false;
+//       })
+//       .addCase(sendOTP.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload || { message: "Failed to send OTP", code: "SEND_OTP_FAILED" };
+//       })
+//       // verifyOTP
+//       .addCase(verifyOTP.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(verifyOTP.fulfilled, (state, action) => {
+//         state.loading = false;
+//         state.user = action.payload.user;
+//         state.balance = action.payload.user.balance;
+//         state.accessToken = action.payload.accessToken;
+//         state.refreshToken = action.payload.refreshToken;
+//         // Save tokens to localStorage for later use by axios interceptor
+//         localStorage.setItem("accessToken", action.payload.accessToken);
+//         localStorage.setItem("refreshToken", action.payload.refreshToken);
+//       })
+//       .addCase(verifyOTP.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload || { message: "OTP verification failed", code: "VERIFY_OTP_FAILED" };
+//       })
+//       // performLogout
+//       .addCase(performLogout.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(performLogout.fulfilled, (state) => {
+//         state.loading = false;
+//         // Tokens will be cleared in the logout reducer via synchronous logout action
+//       })
+//       .addCase(performLogout.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload || { message: "Logout failed", code: "LOGOUT_FAILED" };
+//       });
+//   },
+// });
+
+// export const { updateAccessToken, updateBalance, logout } = authSlice.actions;
+// export default authSlice.reducer;
+
+// // src/features/authSlice.js
+// import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+// import axiosInstance from "../app/axiosInstance";
+
+// // Thunk to send OTP
+// export const sendOTP = createAsyncThunk(
+//   "auth/sendOTP",
+//   async ({ phone, mode }, thunkAPI) => {
+//     try {
+//       const response = await axiosInstance.post("/otp/send", { phone, mode });
+//       return response.data;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response.data);
+//     }
+//   }
+// );
+
+// // Thunk to verify OTP, then register or login
+// export const verifyOTP = createAsyncThunk(
+//   "auth/verifyOTP",
+//   async ({ phone, code, mode }, thunkAPI) => {
+//     try {
+//       // First, verify the OTP
+//       await axiosInstance.post("/otp/verify", { phone, code });
+//       // Then call the appropriate endpoint based on mode
+//       const endpoint = mode === "register" ? "/auth/register" : "/auth/login";
+//       const response = await axiosInstance.post(endpoint, { phone, code });
+//       // Expected response: { user, accessToken, refreshToken, message }
+//       return response.data;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response.data);
+//     }
+//   }
+// );
+
+// // Thunk to perform logout
+// export const performLogout = createAsyncThunk(
+//   "auth/logout",
+//   async (_, thunkAPI) => {
+//     try {
+//       const { refreshToken } = thunkAPI.getState().auth;
+//       if (!refreshToken) {
+//         throw new Error("No refresh token found");
+//       }
+//       await axiosInstance.post("/auth/logout", { refreshToken });
+//       return true;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response?.data || error.message);
+//     }
+//   }
+// );
+
+// // Initial auth state
+// const initialState = {
+//   user: null,
+//   balance: null,
+//   accessToken: null,
+//   refreshToken: null,
+//   loading: false,
+//   error: null,
+// };
+
+// const authSlice = createSlice({
+//   name: "auth",
+//   initialState,
+//   reducers: {
+//     updateAccessToken(state, action) {
+//       state.accessToken = action.payload;
+//       localStorage.setItem("accessToken", action.payload);
+//     },
+//     updateBalance(state, action) {
+//       state.balance = action.payload;
+//       if (state.user) {
+//         state.user.balance = action.payload;
+//       }
+//     },
+//     // Synchronous logout clears auth state and tokens
+//     logout(state) {
+//       state.user = null;
+//       state.balance = null;
+//       state.accessToken = null;
+//       state.refreshToken = null;
+//       localStorage.removeItem("accessToken");
+//       localStorage.removeItem("refreshToken");
+//     },
+//   },
+//   extraReducers: (builder) => {
+//     builder
+//       // sendOTP
+//       .addCase(sendOTP.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(sendOTP.fulfilled, (state) => {
+//         state.loading = false;
+//       })
+//       .addCase(sendOTP.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload || "Failed to send OTP";
+//       })
+//       // verifyOTP
+//       .addCase(verifyOTP.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(verifyOTP.fulfilled, (state, action) => {
+//         state.loading = false;
+//         state.user = action.payload.user;
+//         state.balance = action.payload.user.balance;
+//         state.accessToken = action.payload.accessToken;
+//         state.refreshToken = action.payload.refreshToken;
+//         // Save tokens to localStorage for later use by axios interceptor
+//         localStorage.setItem("accessToken", action.payload.accessToken);
+//         localStorage.setItem("refreshToken", action.payload.refreshToken);
+//       })
+//       .addCase(verifyOTP.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload || "OTP verification failed";
+//       })
+//       // performLogout
+//       .addCase(performLogout.pending, (state) => {
+//         state.loading = true;
+//         state.error = null;
+//       })
+//       .addCase(performLogout.fulfilled, (state) => {
+//         state.loading = false;
+//         // Tokens will be cleared in the logout reducer
+//       })
+//       .addCase(performLogout.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload || "Logout failed";
+//       });
+//   },
+// });
+
+// export const { updateAccessToken, updateBalance, logout } = authSlice.actions;
+// export default authSlice.reducer;
 
 // src/features/authSlice.js
 // import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
