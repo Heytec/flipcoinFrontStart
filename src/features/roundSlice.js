@@ -247,20 +247,7 @@ const roundSlice = createSlice({
           details: action.payload.details
         };
       })
-      // .addCase(placeBet.pending, (state) => {
-      //   state.loading = true;
-      //   state.error = null;
-      // })
-      // .addCase(placeBet.fulfilled, (state, action) => {
-      //   state.loading = false;
-      //   const betArray = action.payload.bet;
-      //   state.lastBet =
-      //     Array.isArray(betArray) && betArray.length > 0 ? betArray[0] : null;
-      // })
-      // .addCase(placeBet.rejected, (state, action) => {
-      //   state.loading = false;
-      //   state.error = action.payload;
-      // })
+
       // startRound
       .addCase(startRound.pending, (state) => {
         state.loading = true;

@@ -12,8 +12,8 @@ const useBalanceRealtime = () => {
   const user = useSelector((state) => state.auth.user);
 
   useEffect(() => {
-    if (user && user._id) {
-      const channelName = `user:${user._id}`;
+    if (user && user.id) {
+      const channelName = `user:${user.id}`;
       console.log(channelName)
       const channel = ably.channels.get(channelName);
 
