@@ -1,127 +1,439 @@
-// // // // // // // // // // // // // // src/components/CoinFlip.js
-// src/components/CoinFlip.js
-import React, { useEffect, useState, useRef } from "react";
-import { motion } from "framer-motion";
+// // // // // // // // // // // // // // // // src/components/CoinFlip.js
 
-const flipVariants = {
-  hidden: { opacity: 0, rotateY: "0deg" },
-  visible: (flipKeyframes) => ({
-    opacity: 1,
-    // Animate through the provided keyframes (converted to "deg" strings)
-    rotateY: flipKeyframes.map((angle) => `${angle}deg`),
-    transition: { duration: 3, ease: "easeInOut" },
-  }),
-};
+// src/components/CoinFlip.js
+import React from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function CoinFlip({ round }) {
-  const [isFlipping, setIsFlipping] = useState(false);
-  const [outcome, setOutcome] = useState(null);
-  const [flipKeyframes, setFlipKeyframes] = useState([]);
-  const [displaySide, setDisplaySide] = useState("?");
-  const flipTimeoutRef = useRef(null);
-  // Use a ref to track the previous round ID so that we trigger the flip for every new round
-  const prevRoundIdRef = useRef(null);
+  const isFlipping = !round.outcome;
+  const outcome = round?.outcome || "heads";
 
-  // Cleanup any pending timeouts when the component unmounts
-  useEffect(() => {
-    return () => {
-      if (flipTimeoutRef.current) {
-        clearTimeout(flipTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // When a new round is received, start the flip if there's a new round ID with an outcome
-  useEffect(() => {
-    if (!round) return;
-
-    if (round.outcome && round._id !== prevRoundIdRef.current) {
-      setOutcome(round.outcome);
-      setIsFlipping(true);
-      prevRoundIdRef.current = round._id;
-    }
-  }, [round]);
-
-  // Compute keyframes for the coin flip animation based on the outcome
-  useEffect(() => {
-    if (isFlipping && outcome) {
-      const baseAngle =
-        outcome === "tails" ? 180 : outcome === "house" ? 90 : 0;
-      const fullFlips = Math.floor(Math.random() * 3) + 2; // between 2 and 4 flips
-      const totalRotation = fullFlips * 360 + baseAngle;
-
-      const keyframes = [
-        0,
-        totalRotation * 0.25,
-        totalRotation * 0.5,
-        totalRotation * 0.75,
-        totalRotation - 30,
-        totalRotation,
-      ];
-      setFlipKeyframes(keyframes);
-    }
-  }, [isFlipping, outcome]);
-
-  // Update the displayed side at short intervals while flipping
-  useEffect(() => {
-    let intervalId;
-    if (isFlipping) {
-      intervalId = setInterval(() => {
-        const sides = ["H", "T", "EDGE"];
-        setDisplaySide(sides[Math.floor(Math.random() * sides.length)]);
-      }, 100);
-    }
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isFlipping]);
-
-  // When the animation completes, show the final outcome (no callback needed)
-  const handleAnimationComplete = () => {
-    const finalDisplay =
-      outcome === "heads"
-        ? "H"
-        : outcome === "tails"
-        ? "T"
-        : outcome === "house"
-        ? "EDGE"
-        : "?";
-    setDisplaySide(finalDisplay);
-    setIsFlipping(false);
-    console.log("Animation complete. Outcome:", outcome);
+  // Enhanced coin flip animation variants with wobble effect
+  const coinVariants = {
+    initial: {
+      rotateX: 0,
+      rotateY: 0,
+      scale: 1,
+    },
+    flip: {
+      rotateX: isFlipping
+        ? [0, 180, 360, 540, 720, 900]
+        : outcome === "edge" 
+          ? 90
+          : outcome === "heads" 
+            ? 0 
+            : 180,
+      rotateY: isFlipping
+        ? [0, 30, -30, 30, -30, 0]
+        : outcome === "edge"
+          ? [0, -20, 20, -10, 10, 0]
+          : 0,
+      scale: isFlipping 
+        ? [1, 1.1, 1, 1.1, 1]
+        : outcome === "edge"
+          ? 0.8
+          : 1,
+      transition: {
+        duration: isFlipping ? 2.5 : 0.8,
+        repeat: isFlipping ? Infinity : 0,
+        ease: isFlipping ? "easeInOut" : "easeOut",
+        rotateY: {
+          duration: isFlipping ? 2.5 : 0.3,
+          repeat: outcome === "edge" ? Infinity : 0,
+          repeatType: "reverse",
+        }
+      },
+    },
   };
 
-  const finalDisplay =
-    outcome === "heads"
-      ? "H"
-      : outcome === "tails"
-      ? "T"
-      : outcome === "house"
-      ? "EDGE"
-      : "?";
+  // Shadow animation variants
+  const shadowVariants = {
+    initial: {
+      scale: 1,
+      opacity: 0.3,
+    },
+    animate: {
+      scale: isFlipping 
+        ? [1, 0.8, 1, 0.8, 1]
+        : outcome === "edge" 
+          ? 0.6
+          : 1,
+      opacity: isFlipping 
+        ? [0.3, 0.2, 0.3, 0.2, 0.3]
+        : outcome === "edge"
+          ? 0.4
+          : 0.3,
+      transition: {
+        duration: isFlipping ? 2.5 : 0.8,
+        repeat: isFlipping ? Infinity : 0,
+        ease: "easeInOut",
+      },
+    },
+  };
 
   return (
-    <div className="mt-4 flex justify-center">
-      {isFlipping && outcome && flipKeyframes.length > 0 ? (
+    <div className="flex flex-col items-center justify-center min-h-[300px] perspective-1000">
+      <div className="relative w-full h-full flex justify-center items-center">
+        {/* Coin Shadow */}
         <motion.div
-          key="coin-flip"
-          className="w-24 h-24 bg-yellow-300 rounded-full flex items-center justify-center text-2xl font-bold"
-          variants={flipVariants}
-          initial="hidden"
-          animate="visible"
-          custom={flipKeyframes}
-          onAnimationComplete={handleAnimationComplete}
+          className="absolute bottom-0 w-24 h-4 bg-black/20 rounded-full blur-md"
+          initial="initial"
+          animate="animate"
+          variants={shadowVariants}
+        />
+
+        {/* Coin */}
+        <AnimatePresence>
+          <motion.div
+            className="relative w-32 h-32 cursor-pointer"
+            initial="initial"
+            animate="flip"
+            variants={coinVariants}
+            style={{ 
+              transformStyle: "preserve-3d",
+              perspective: "1000px"
+            }}
+          >
+            {/* Heads Side */}
+            <div className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden">
+              <div className="w-full h-full rounded-full bg-gradient-to-b from-yellow-300 via-yellow-400 to-yellow-500 border-8 border-yellow-500 flex items-center justify-center shadow-inner">
+                <div className="text-4xl font-bold text-yellow-800 transform -scale-y-100">
+                  H
+                </div>
+              </div>
+            </div>
+
+            {/* Tails Side */}
+            <div
+              className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden"
+              style={{ transform: "rotateX(180deg)" }}
+            >
+              <div className="w-full h-full rounded-full bg-gradient-to-b from-gray-300 via-gray-400 to-gray-500 border-8 border-gray-500 flex items-center justify-center shadow-inner">
+                <div className="text-4xl font-bold text-gray-800 transform -scale-y-100">
+                  T
+                </div>
+              </div>
+            </div>
+
+            {/* Edge Side */}
+            <div
+              className="absolute w-full h-8 rounded-full flex items-center justify-center backface-hidden"
+              style={{ 
+                transform: "rotateX(90deg) translateZ(16px)",
+                background: "linear-gradient(to right, #FFD700, #FFA500)"
+              }}
+            >
+              <div className="text-sm font-bold text-yellow-900 rotate-180">
+                EDGE
+              </div>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Outcome Display */}
+      {round.outcome && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`mt-16 text-3xl font-bold ${
+            outcome === "edge" 
+              ? "bg-gradient-to-r from-orange-400 to-red-600"
+              : "bg-gradient-to-r from-yellow-400 to-yellow-600"
+          } bg-clip-text text-transparent`}
         >
-          {displaySide}
+          {outcome.toUpperCase()} {outcome === "edge" ? "!" : "WINS!"}
         </motion.div>
-      ) : (
-        <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-2xl font-bold">
-          {finalDisplay}
-        </div>
       )}
     </div>
   );
 }
+// // src/components/CoinFlip.js
+// import React from "react";
+// import { motion, AnimatePresence } from "framer-motion";
+
+// export default function CoinFlip({ round }) {
+//   const isFlipping = !round.outcome;
+//   const outcome = round?.outcome || "heads";
+
+//   // Enhanced coin flip animation variants
+//   const coinVariants = {
+//     initial: {
+//       rotateX: 0,
+//       scale: 1,
+//     },
+//     flip: {
+//       rotateX: isFlipping 
+//         ? [0, 360, 720, 1080, 1440, 1800] 
+//         : outcome === "heads" ? 0 : 180,
+//       scale: isFlipping 
+//         ? [1, 1.2, 1, 1.2, 1, 1.2, 1]
+//         : 1,
+//       transition: {
+//         duration: isFlipping ? 3 : 0.5,
+//         repeat: isFlipping ? Infinity : 0,
+//         ease: isFlipping ? "linear" : "easeInOut",
+//         scale: {
+//           duration: isFlipping ? 3 : 0.5,
+//           ease: "easeInOut",
+//         },
+//       },
+//     },
+//   };
+
+//   return (
+//     <div className="flex flex-col items-center justify-center min-h-[300px] perspective-1000">
+//       <div className="relative w-full h-full flex justify-center items-center">
+//         {/* Coin Shadow */}
+//         <motion.div
+//           className="absolute bottom-0 w-24 h-4 bg-black/20 rounded-full blur-md"
+//           animate={{
+//             scale: isFlipping ? [1, 0.8, 1, 0.8, 1] : 1,
+//             opacity: isFlipping ? [0.3, 0.2, 0.3, 0.2, 0.3] : 0.3,
+//           }}
+//           transition={{
+//             duration: isFlipping ? 3 : 0.5,
+//             repeat: isFlipping ? Infinity : 0,
+//             ease: "linear",
+//           }}
+//         />
+
+//         {/* Coin */}
+//         <AnimatePresence>
+//           <motion.div
+//             className="relative w-32 h-32 cursor-pointer"
+//             initial="initial"
+//             animate="flip"
+//             variants={coinVariants}
+//             style={{ 
+//               transformStyle: "preserve-3d",
+//               perspective: "1000px"
+//             }}
+//           >
+//             {/* Heads Side */}
+//             <div className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden">
+//               <div className="w-full h-full rounded-full bg-gradient-to-b from-yellow-300 via-yellow-400 to-yellow-500 border-8 border-yellow-500 flex items-center justify-center shadow-inner">
+//                 <div className="text-4xl font-bold text-yellow-800 transform -scale-y-100">
+//                   H
+//                 </div>
+//               </div>
+//             </div>
+
+//             {/* Tails Side */}
+//             <div
+//               className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden"
+//               style={{ transform: "rotateX(180deg)" }}
+//             >
+//               <div className="w-full h-full rounded-full bg-gradient-to-b from-gray-300 via-gray-400 to-gray-500 border-8 border-gray-500 flex items-center justify-center shadow-inner">
+//                 <div className="text-4xl font-bold text-gray-800 transform -scale-y-100">
+//                   T
+//                 </div>
+//               </div>
+//             </div>
+//           </motion.div>
+//         </AnimatePresence>
+//       </div>
+
+//       {/* Outcome Display */}
+//       {round.outcome && (
+//         <motion.div
+//           initial={{ opacity: 0, y: 20 }}
+//           animate={{ opacity: 1, y: 0 }}
+//           className="mt-16 text-3xl font-bold text-gray-800 bg-gradient-to-r from-yellow-400 to-yellow-600 bg-clip-text text-transparent"
+//         >
+//           {round.outcome.toUpperCase()} WINS!
+//         </motion.div>
+//       )}
+//     </div>
+//   );
+// }
+
+
+// // src/components/CoinFlip.js
+// import React from "react";
+// import { motion, AnimatePresence } from "framer-motion";
+
+// export default function CoinFlip({ round }) {
+//   const isFlipping = !round.outcome; // Check if the coin is still flipping
+//   const outcome = round?.outcome || "heads"; // Default to "heads" if no outcome yet
+
+//   // Animation variants for the coin
+//   const coinVariants = {
+//     initial: {
+//       rotateX: 0,
+//     },
+//     flip: {
+//       rotateX: isFlipping ? [0, 1800] : outcome === "heads" ? 0 : 180,
+//       transition: {
+//         duration: isFlipping ? 2 : 0.5,
+//         repeat: isFlipping ? Infinity : 0,
+//         ease: "easeInOut",
+//       },
+//     },
+//   };
+
+//   return (
+//     <div className="flex flex-col items-center justify-center my-8">
+//       <AnimatePresence>
+//         <motion.div
+//           className="relative w-32 h-32"
+//           initial="initial"
+//           animate="flip"
+//           variants={coinVariants}
+//           style={{ transformStyle: "preserve-3d" }}
+//         >
+//           {/* Heads Side */}
+//           <div className="absolute w-full h-full rounded-full bg-gradient-to-r from-yellow-400 to-yellow-300 flex items-center justify-center shadow-lg backface-hidden">
+//             <div className="text-4xl font-bold text-yellow-800">H</div>
+//           </div>
+
+//           {/* Tails Side */}
+//           <div
+//             className="absolute w-full h-full rounded-full bg-gradient-to-r from-gray-400 to-gray-300 flex items-center justify-center shadow-lg backface-hidden"
+//             style={{ transform: "rotateX(180deg)" }}
+//           >
+//             <div className="text-4xl font-bold text-gray-800">T</div>
+//           </div>
+//         </motion.div>
+//       </AnimatePresence>
+
+//       {/* Outcome Display */}
+//       {round.outcome && (
+//         <motion.div
+//           initial={{ opacity: 0, y: 20 }}
+//           animate={{ opacity: 1, y: 0 }}
+//           className="mt-6 text-2xl font-bold text-gray-800"
+//         >
+//           {round.outcome.toUpperCase()} Wins!
+//         </motion.div>
+//       )}
+//     </div>
+//   );
+// }
+
+// // src/components/CoinFlip.js
+// import React, { useEffect, useState, useRef } from "react";
+// import { motion } from "framer-motion";
+
+// const flipVariants = {
+//   hidden: { opacity: 0, rotateY: "0deg" },
+//   visible: (flipKeyframes) => ({
+//     opacity: 1,
+//     // Animate through the provided keyframes (converted to "deg" strings)
+//     rotateY: flipKeyframes.map((angle) => `${angle}deg`),
+//     transition: { duration: 3, ease: "easeInOut" },
+//   }),
+// };
+
+// export default function CoinFlip({ round }) {
+//   const [isFlipping, setIsFlipping] = useState(false);
+//   const [outcome, setOutcome] = useState(null);
+//   const [flipKeyframes, setFlipKeyframes] = useState([]);
+//   const [displaySide, setDisplaySide] = useState("?");
+//   const flipTimeoutRef = useRef(null);
+//   // Use a ref to track the previous round ID so that we trigger the flip for every new round
+//   const prevRoundIdRef = useRef(null);
+
+//   // Cleanup any pending timeouts when the component unmounts
+//   useEffect(() => {
+//     return () => {
+//       if (flipTimeoutRef.current) {
+//         clearTimeout(flipTimeoutRef.current);
+//       }
+//     };
+//   }, []);
+
+//   // When a new round is received, start the flip if there's a new round ID with an outcome
+//   useEffect(() => {
+//     if (!round) return;
+
+//     if (round.outcome && round._id !== prevRoundIdRef.current) {
+//       setOutcome(round.outcome);
+//       setIsFlipping(true);
+//       prevRoundIdRef.current = round._id;
+//     }
+//   }, [round]);
+
+//   // Compute keyframes for the coin flip animation based on the outcome
+//   useEffect(() => {
+//     if (isFlipping && outcome) {
+//       const baseAngle =
+//         outcome === "tails" ? 180 : outcome === "house" ? 90 : 0;
+//       const fullFlips = Math.floor(Math.random() * 3) + 2; // between 2 and 4 flips
+//       const totalRotation = fullFlips * 360 + baseAngle;
+
+//       const keyframes = [
+//         0,
+//         totalRotation * 0.25,
+//         totalRotation * 0.5,
+//         totalRotation * 0.75,
+//         totalRotation - 30,
+//         totalRotation,
+//       ];
+//       setFlipKeyframes(keyframes);
+//     }
+//   }, [isFlipping, outcome]);
+
+//   // Update the displayed side at short intervals while flipping
+//   useEffect(() => {
+//     let intervalId;
+//     if (isFlipping) {
+//       intervalId = setInterval(() => {
+//         const sides = ["H", "T", "EDGE"];
+//         setDisplaySide(sides[Math.floor(Math.random() * sides.length)]);
+//       }, 100);
+//     }
+//     return () => {
+//       if (intervalId) clearInterval(intervalId);
+//     };
+//   }, [isFlipping]);
+
+//   // When the animation completes, show the final outcome (no callback needed)
+//   const handleAnimationComplete = () => {
+//     const finalDisplay =
+//       outcome === "heads"
+//         ? "H"
+//         : outcome === "tails"
+//         ? "T"
+//         : outcome === "house"
+//         ? "EDGE"
+//         : "?";
+//     setDisplaySide(finalDisplay);
+//     setIsFlipping(false);
+//     console.log("Animation complete. Outcome:", outcome);
+//   };
+
+//   const finalDisplay =
+//     outcome === "heads"
+//       ? "H"
+//       : outcome === "tails"
+//       ? "T"
+//       : outcome === "house"
+//       ? "EDGE"
+//       : "?";
+
+//   return (
+//     <div className="mt-4 flex justify-center">
+//       {isFlipping && outcome && flipKeyframes.length > 0 ? (
+//         <motion.div
+//           key="coin-flip"
+//           className="w-24 h-24 bg-yellow-300 rounded-full flex items-center justify-center text-2xl font-bold"
+//           variants={flipVariants}
+//           initial="hidden"
+//           animate="visible"
+//           custom={flipKeyframes}
+//           onAnimationComplete={handleAnimationComplete}
+//         >
+//           {displaySide}
+//         </motion.div>
+//       ) : (
+//         <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-2xl font-bold">
+//           {finalDisplay}
+//         </div>
+//       )}
+//     </div>
+//   );
+// }
 
 // src/components/CoinFlip.js
 // import React, { useEffect, useState, useRef } from "react";
