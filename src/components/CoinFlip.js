@@ -1,47 +1,113 @@
-// // // // // // // // // // // // // // // // src/components/CoinFlip.js
-
 // src/components/CoinFlip.js
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function CoinFlip({ round }) {
+  const [isMuted, setIsMuted] = useState(true); // Start muted by default
+  const [isAudioInitialized, setIsAudioInitialized] = useState(false);
   const isFlipping = !round.outcome;
   const outcome = round?.outcome || "heads";
 
-  // Enhanced coin flip animation variants with wobble effect
+  // Audio refs
+  const flipSoundRef = useRef(null);
+  const resultSoundRef = useRef(null);
+  const edgeSoundRef = useRef(null);
+
+  // Initialize audio only once after user interaction
+  const initializeAudio = () => {
+    if (!isAudioInitialized) {
+      flipSoundRef.current = new Audio("/sounds/coin-flip.mp3");
+      resultSoundRef.current = new Audio("/sounds/result-chime.mp3");
+      edgeSoundRef.current = new Audio("/sounds/edge-special.mp3");
+
+      // Set audio properties
+      flipSoundRef.current.loop = true;
+      flipSoundRef.current.volume = 0.3;
+      resultSoundRef.current.volume = 0.5;
+      edgeSoundRef.current.volume = 0.5;
+
+      setIsAudioInitialized(true);
+    }
+  };
+
+  // Toggle mute (and initialize audio if needed)
+  const toggleSound = () => {
+    if (!isAudioInitialized) {
+      initializeAudio();
+    }
+    setIsMuted((prev) => !prev);
+
+    if (isAudioInitialized) {
+      [flipSoundRef, resultSoundRef, edgeSoundRef].forEach((soundRef) => {
+        if (soundRef.current) {
+          // Set muted property to the new state (note: state update is async,
+          // so we use the inverse of the previous state)
+          soundRef.current.muted = !isMuted;
+        }
+      });
+    }
+  };
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (isAudioInitialized) {
+        flipSoundRef.current?.pause();
+        resultSoundRef.current?.pause();
+        edgeSoundRef.current?.pause();
+      }
+    };
+  }, [isAudioInitialized]);
+
+  // Play flip sound while coin is flipping
+  useEffect(() => {
+    if (isAudioInitialized && isFlipping && !isMuted) {
+      flipSoundRef.current.currentTime = 0;
+      flipSoundRef.current.play().catch(() => {
+        setIsMuted(true);
+      });
+    } else if (isAudioInitialized) {
+      flipSoundRef.current?.pause();
+    }
+  }, [isFlipping, isAudioInitialized, isMuted]);
+
+  // Play result sound when outcome is determined
+  useEffect(() => {
+    if (round.outcome && isAudioInitialized && !isMuted) {
+      const soundToPlay =
+        outcome === "edge" ? edgeSoundRef.current : resultSoundRef.current;
+      if (soundToPlay) {
+        soundToPlay.currentTime = 0;
+        soundToPlay.play().catch(() => {
+          setIsMuted(true);
+        });
+      }
+    }
+  }, [round.outcome, outcome, isAudioInitialized, isMuted]);
+
+  // Modified coin flip animation variants for horizontal rotation
   const coinVariants = {
     initial: {
-      rotateX: 0,
       rotateY: 0,
       scale: 1,
     },
     flip: {
-      rotateX: isFlipping
-        ? [0, 180, 360, 540, 720, 900]
-        : outcome === "edge" 
-          ? 90
-          : outcome === "heads" 
-            ? 0 
-            : 180,
       rotateY: isFlipping
-        ? [0, 30, -30, 30, -30, 0]
+        ? [0, 180, 360, 540, 720, 900]
         : outcome === "edge"
-          ? [0, -20, 20, -10, 10, 0]
-          : 0,
-      scale: isFlipping 
+        ? 90
+        : outcome === "heads"
+        ? 0
+        : 180,
+      scale: isFlipping
         ? [1, 1.1, 1, 1.1, 1]
         : outcome === "edge"
-          ? 0.8
-          : 1,
+        ? 0.8
+        : 1,
       transition: {
         duration: isFlipping ? 2.5 : 0.8,
         repeat: isFlipping ? Infinity : 0,
         ease: isFlipping ? "easeInOut" : "easeOut",
-        rotateY: {
-          duration: isFlipping ? 2.5 : 0.3,
-          repeat: outcome === "edge" ? Infinity : 0,
-          repeatType: "reverse",
-        }
       },
     },
   };
@@ -53,16 +119,16 @@ export default function CoinFlip({ round }) {
       opacity: 0.3,
     },
     animate: {
-      scale: isFlipping 
+      scale: isFlipping
         ? [1, 0.8, 1, 0.8, 1]
-        : outcome === "edge" 
-          ? 0.6
-          : 1,
-      opacity: isFlipping 
+        : outcome === "edge"
+        ? 0.6
+        : 1,
+      opacity: isFlipping
         ? [0.3, 0.2, 0.3, 0.2, 0.3]
         : outcome === "edge"
-          ? 0.4
-          : 0.3,
+        ? 0.4
+        : 0.3,
       transition: {
         duration: isFlipping ? 2.5 : 0.8,
         repeat: isFlipping ? Infinity : 0,
@@ -72,7 +138,49 @@ export default function CoinFlip({ round }) {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[300px] perspective-1000">
+    <div className="flex flex-col items-center justify-center min-h-[300px] perspective-1000 relative">
+      {/* Sound Toggle Button */}
+      <button
+        onClick={toggleSound}
+        className="absolute top-4 right-4 p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors"
+      >
+        {isMuted ? (
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+            />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+            />
+          </svg>
+        ) : (
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+            />
+          </svg>
+        )}
+      </button>
+
       <div className="relative w-full h-full flex justify-center items-center">
         {/* Coin Shadow */}
         <motion.div
@@ -89,43 +197,37 @@ export default function CoinFlip({ round }) {
             initial="initial"
             animate="flip"
             variants={coinVariants}
-            style={{ 
+            style={{
               transformStyle: "preserve-3d",
-              perspective: "1000px"
+              perspective: "1000px",
             }}
           >
             {/* Heads Side */}
             <div className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden">
               <div className="w-full h-full rounded-full bg-gradient-to-b from-yellow-300 via-yellow-400 to-yellow-500 border-8 border-yellow-500 flex items-center justify-center shadow-inner">
-                <div className="text-4xl font-bold text-yellow-800 transform -scale-y-100">
-                  H
-                </div>
+                <div className="text-4xl font-bold text-yellow-800">H</div>
               </div>
             </div>
 
             {/* Tails Side */}
             <div
               className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden"
-              style={{ transform: "rotateX(180deg)" }}
+              style={{ transform: "rotateY(180deg)" }}
             >
               <div className="w-full h-full rounded-full bg-gradient-to-b from-gray-300 via-gray-400 to-gray-500 border-8 border-gray-500 flex items-center justify-center shadow-inner">
-                <div className="text-4xl font-bold text-gray-800 transform -scale-y-100">
-                  T
-                </div>
+                <div className="text-4xl font-bold text-gray-800">T</div>
               </div>
             </div>
 
             {/* Edge Side */}
             <div
               className="absolute w-full h-8 rounded-full flex items-center justify-center backface-hidden"
-              style={{ 
-                transform: "rotateX(90deg) translateZ(16px)",
-                background: "linear-gradient(to right, #FFD700, #FFA500)"
+              style={{
+                transform: "rotateY(90deg) translateZ(64px)",
+                background: "linear-gradient(to right, #FFD700, #FFA500)",
               }}
             >
-              <div className="text-sm font-bold text-yellow-900 rotate-180">
-                EDGE
-              </div>
+              <div className="text-sm font-bold text-yellow-900">EDGE</div>
             </div>
           </motion.div>
         </AnimatePresence>
@@ -137,7 +239,7 @@ export default function CoinFlip({ round }) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className={`mt-16 text-3xl font-bold ${
-            outcome === "edge" 
+            outcome === "edge"
               ? "bg-gradient-to-r from-orange-400 to-red-600"
               : "bg-gradient-to-r from-yellow-400 to-yellow-600"
           } bg-clip-text text-transparent`}
@@ -148,6 +250,1028 @@ export default function CoinFlip({ round }) {
     </div>
   );
 }
+
+
+
+// // // // // // // // // // // // // // // // // // // // src/components/CoinFlip.js
+// // src/components/CoinFlip.js
+// import React, { useState, useEffect, useRef } from "react";
+// import { motion, AnimatePresence } from "framer-motion";
+
+// export default function CoinFlip({ round }) {
+//   const [showResult, setShowResult] = useState(false);
+//   const [isMuted, setIsMuted] = useState(true); // Start muted by default
+//   const [isAudioInitialized, setIsAudioInitialized] = useState(false);
+//   const isFlipping = !round.outcome && !showResult;
+//   const outcome = round?.outcome || "heads";
+
+//   // Audio refs
+//   const flipSoundRef = useRef(null);
+//   const resultSoundRef = useRef(null);
+//   const edgeSoundRef = useRef(null);
+
+//   // Initialize audio only after user interaction
+//   const initializeAudio = () => {
+//     if (!isAudioInitialized) {
+//       flipSoundRef.current = new Audio("/sounds/coin-flip.mp3");
+//       resultSoundRef.current = new Audio("/sounds/result-chime.mp3");
+//       edgeSoundRef.current = new Audio("/sounds/edge-special.mp3");
+
+//       flipSoundRef.current.loop = true;
+//       flipSoundRef.current.volume = 0.3;
+//       resultSoundRef.current.volume = 0.5;
+//       edgeSoundRef.current.volume = 0.5;
+
+//       setIsAudioInitialized(true);
+//     }
+//   };
+
+//   // Cleanup audio on unmount
+//   useEffect(() => {
+//     return () => {
+//       if (isAudioInitialized) {
+//         flipSoundRef.current?.pause();
+//         resultSoundRef.current?.pause();
+//         edgeSoundRef.current?.pause();
+//       }
+//     };
+//   }, [isAudioInitialized]);
+
+//   // Handle flip sound
+//   useEffect(() => {
+//     if (isAudioInitialized && isFlipping && !isMuted) {
+//       flipSoundRef.current.currentTime = 0;
+//       flipSoundRef.current.play().catch(() => {
+//         // Handle play() promise rejection
+//         setIsMuted(true);
+//       });
+//     } else if (isAudioInitialized) {
+//       flipSoundRef.current?.pause();
+//     }
+//   }, [isFlipping, isAudioInitialized, isMuted]);
+
+//   // Reset showResult when a new flip starts
+//   useEffect(() => {
+//     if (!round.outcome) {
+//       setShowResult(false);
+//     }
+//   }, [round]);
+
+//   // Show result for 3 seconds when outcome is determined
+//   useEffect(() => {
+//     if (round.outcome && !showResult && isAudioInitialized && !isMuted) {
+//       setShowResult(true);
+      
+//       // Play the appropriate result sound
+//       const soundToPlay =
+//         outcome === "edge" ? edgeSoundRef.current : resultSoundRef.current;
+//       if (soundToPlay) {
+//         soundToPlay.currentTime = 0;
+//         soundToPlay.play().catch(() => {
+//           // Handle play() promise rejection
+//           setIsMuted(true);
+//         });
+//       }
+
+//       const timer = setTimeout(() => {
+//         setShowResult(false);
+//       }, 3000);
+
+//       return () => clearTimeout(timer);
+//     }
+//   }, [round.outcome, showResult, outcome, isAudioInitialized, isMuted]);
+
+//   const toggleSound = () => {
+//     if (!isAudioInitialized) {
+//       initializeAudio();
+//     }
+//     setIsMuted(!isMuted);
+//     if (isAudioInitialized) {
+//       [flipSoundRef, resultSoundRef, edgeSoundRef].forEach((soundRef) => {
+//         if (soundRef.current) {
+//           soundRef.current.muted = isMuted;
+//         }
+//       });
+//     }
+//   };
+
+//   const coinVariants = {
+//     initial: {
+//       rotateY: 0,
+//       scale: 1,
+//     },
+//     flip: {
+//       rotateY: isFlipping
+//         ? [0, 180, 360, 540, 720, 900]
+//         : outcome === "edge"
+//         ? 90
+//         : outcome === "heads"
+//         ? 0
+//         : 180,
+//       scale: isFlipping
+//         ? [1, 1.1, 1, 1.1, 1]
+//         : outcome === "edge"
+//         ? 0.8
+//         : 1,
+//       transition: {
+//         duration: isFlipping ? 2.5 : 0.8,
+//         repeat: isFlipping ? Infinity : 0,
+//         ease: isFlipping ? "easeInOut" : "easeOut",
+//       },
+//     },
+//     result: {
+//       rotateY:
+//         outcome === "edge" ? 90 : outcome === "heads" ? 0 : 180,
+//       scale: outcome === "edge" ? 0.8 : 1,
+//       transition: {
+//         duration: 0.5,
+//         ease: "easeOut",
+//       },
+//     },
+//   };
+
+//   const shadowVariants = {
+//     initial: {
+//       scale: 1,
+//       opacity: 0.3,
+//     },
+//     animate: {
+//       scale: isFlipping
+//         ? [1, 0.8, 1, 0.8, 1]
+//         : outcome === "edge"
+//         ? 0.6
+//         : 1,
+//       opacity: isFlipping
+//         ? [0.3, 0.2, 0.3, 0.2, 0.3]
+//         : outcome === "edge"
+//         ? 0.4
+//         : 0.3,
+//       transition: {
+//         duration: isFlipping ? 2.5 : 0.8,
+//         repeat: isFlipping ? Infinity : 0,
+//         ease: "easeInOut",
+//       },
+//     },
+//     result: {
+//       scale: outcome === "edge" ? 0.6 : 1,
+//       opacity: outcome === "edge" ? 0.4 : 0.3,
+//       transition: {
+//         duration: 0.5,
+//         ease: "easeOut",
+//       },
+//     },
+//   };
+
+//   return (
+//     <div className="flex flex-col items-center justify-center min-h-[300px] perspective-1000">
+//       {/* Sound Toggle Button */}
+//       <button
+//         onClick={toggleSound}
+//         className="absolute top-4 right-4 p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors"
+//       >
+//         {isMuted ? (
+//           <svg
+//             className="w-6 h-6"
+//             fill="none"
+//             viewBox="0 0 24 24"
+//             stroke="currentColor"
+//           >
+//             <path
+//               strokeLinecap="round"
+//               strokeLinejoin="round"
+//               strokeWidth={2}
+//               d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+//             />
+//             <path
+//               strokeLinecap="round"
+//               strokeLinejoin="round"
+//               strokeWidth={2}
+//               d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+//             />
+//           </svg>
+//         ) : (
+//           <svg
+//             className="w-6 h-6"
+//             fill="none"
+//             viewBox="0 0 24 24"
+//             stroke="currentColor"
+//           >
+//             <path
+//               strokeLinecap="round"
+//               strokeLinejoin="round"
+//               strokeWidth={2}
+//               d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+//             />
+//           </svg>
+//         )}
+//       </button>
+
+//       <div className="relative w-full h-full flex justify-center items-center">
+//         {/* Coin Shadow */}
+//         <motion.div
+//           className="absolute bottom-0 w-24 h-4 bg-black/20 rounded-full blur-md"
+//           initial="initial"
+//           animate={showResult ? "result" : "animate"}
+//           variants={shadowVariants}
+//         />
+
+//         {/* Coin */}
+//         <AnimatePresence>
+//           <motion.div
+//             className="relative w-32 h-32 cursor-pointer"
+//             initial="initial"
+//             animate={showResult ? "result" : "flip"}
+//             variants={coinVariants}
+//             style={{
+//               transformStyle: "preserve-3d",
+//               perspective: "1000px",
+//             }}
+//           >
+//             {/* Heads Side */}
+//             <div className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden">
+//               <div className="w-full h-full rounded-full bg-gradient-to-b from-yellow-300 via-yellow-400 to-yellow-500 border-8 border-yellow-500 flex items-center justify-center shadow-inner">
+//                 <div className="text-4xl font-bold text-yellow-800">H</div>
+//               </div>
+//             </div>
+
+//             {/* Tails Side */}
+//             <div
+//               className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden"
+//               style={{ transform: "rotateY(180deg)" }}
+//             >
+//               <div className="w-full h-full rounded-full bg-gradient-to-b from-gray-300 via-gray-400 to-gray-500 border-8 border-gray-500 flex items-center justify-center shadow-inner">
+//                 <div className="text-4xl font-bold text-gray-800">T</div>
+//               </div>
+//             </div>
+
+//             {/* Edge Side */}
+//             <div
+//               className="absolute w-full h-8 rounded-full flex items-center justify-center backface-hidden"
+//               style={{
+//                 transform: "rotateY(90deg) translateZ(64px)",
+//                 background: "linear-gradient(to right, #FFD700, #FFA500)",
+//               }}
+//             >
+//               <div className="text-sm font-bold text-yellow-900">EDGE</div>
+//             </div>
+//           </motion.div>
+//         </AnimatePresence>
+//       </div>
+
+//       {/* Outcome Display */}
+//       {(round.outcome && showResult) && (
+//         <motion.div
+//           initial={{ opacity: 0, y: 20 }}
+//           animate={{ opacity: 1, y: 0 }}
+//           exit={{ opacity: 0, y: 20 }}
+//           className={`mt-16 text-3xl font-bold ${
+//             outcome === "edge"
+//               ? "bg-gradient-to-r from-orange-400 to-red-600"
+//               : "bg-gradient-to-r from-yellow-400 to-yellow-600"
+//           } bg-clip-text text-transparent`}
+//         >
+//           {outcome.toUpperCase()} {outcome === "edge" ? "!" : "WINS!"}
+//         </motion.div>
+//       )}
+//     </div>
+//   );
+// }
+
+
+
+
+// // src/components/CoinFlip.js
+// import React, { useState, useEffect, useRef } from "react";
+// import { motion, AnimatePresence } from "framer-motion";
+
+// export default function CoinFlip({ round }) {
+//   const [showResult, setShowResult] = useState(false);
+//   const [isMuted, setIsMuted] = useState(true); // Start muted by default
+//   const [isAudioInitialized, setIsAudioInitialized] = useState(false);
+//   const isFlipping = !round.outcome && !showResult;
+//   const outcome = round?.outcome || "heads";
+
+//   // Audio refs
+//   const flipSoundRef = useRef(null);
+//   const resultSoundRef = useRef(null);
+//   const edgeSoundRef = useRef(null);
+
+//   // Initialize audio only after user interaction
+//   const initializeAudio = () => {
+//     if (!isAudioInitialized) {
+//       flipSoundRef.current = new Audio("/sounds/coin-flip.mp3");
+//       resultSoundRef.current = new Audio("/sounds/result-chime.mp3");
+//       edgeSoundRef.current = new Audio("/sounds/edge-special.mp3");
+
+//       flipSoundRef.current.loop = true;
+//       flipSoundRef.current.volume = 0.3;
+//       resultSoundRef.current.volume = 0.5;
+//       edgeSoundRef.current.volume = 0.5;
+
+//       setIsAudioInitialized(true);
+//     }
+//   };
+
+//   // Cleanup audio on unmount
+//   useEffect(() => {
+//     return () => {
+//       if (isAudioInitialized) {
+//         flipSoundRef.current?.pause();
+//         resultSoundRef.current?.pause();
+//         edgeSoundRef.current?.pause();
+//       }
+//     };
+//   }, [isAudioInitialized]);
+
+//   // Handle flip sound
+//   useEffect(() => {
+//     if (isAudioInitialized && isFlipping && !isMuted) {
+//       flipSoundRef.current.currentTime = 0;
+//       flipSoundRef.current.play().catch(() => {
+//         // Handle play() promise rejection
+//         setIsMuted(true);
+//       });
+//     } else if (isAudioInitialized) {
+//       flipSoundRef.current?.pause();
+//     }
+//   }, [isFlipping, isAudioInitialized, isMuted]);
+
+//   // Reset showResult when a new flip starts
+//   useEffect(() => {
+//     if (!round.outcome) {
+//       setShowResult(false);
+//     }
+//   }, [round]);
+
+//   // Show result for 3 seconds when outcome is determined
+//   useEffect(() => {
+//     if (round.outcome && !showResult && isAudioInitialized && !isMuted) {
+//       setShowResult(true);
+      
+//       // Play appropriate result sound
+//       const soundToPlay = outcome === "edge" ? edgeSoundRef.current : resultSoundRef.current;
+//       if (soundToPlay) {
+//         soundToPlay.currentTime = 0;
+//         soundToPlay.play().catch(() => {
+//           // Handle play() promise rejection
+//           setIsMuted(true);
+//         });
+//       }
+
+//       const timer = setTimeout(() => {
+//         setShowResult(false);
+//       }, 3000);
+
+//       return () => clearTimeout(timer);
+//     }
+//   }, [round.outcome, showResult, outcome, isAudioInitialized, isMuted]);
+
+//   const toggleSound = () => {
+//     if (!isAudioInitialized) {
+//       initializeAudio();
+//     }
+//     setIsMuted(!isMuted);
+//     if (isAudioInitialized) {
+//       [flipSoundRef, resultSoundRef, edgeSoundRef].forEach(soundRef => {
+//         if (soundRef.current) {
+//           soundRef.current.muted = isMuted;
+//         }
+//       });
+//     }
+//   };
+
+//   const coinVariants = {
+//     initial: {
+//       rotateY: 0,
+//       scale: 1,
+//     },
+//     flip: {
+//       rotateY: isFlipping
+//         ? [0, 180, 360, 540, 720, 900]
+//         : outcome === "edge"
+//           ? 90
+//           : outcome === "heads"
+//             ? 0
+//             : 180,
+//       scale: isFlipping
+//         ? [1, 1.1, 1, 1.1, 1]
+//         : outcome === "edge"
+//           ? 0.8
+//           : 1,
+//       transition: {
+//         duration: isFlipping ? 2.5 : 0.8,
+//         repeat: isFlipping ? Infinity : 0,
+//         ease: isFlipping ? "easeInOut" : "easeOut",
+//       },
+//     },
+//     result: {
+//       rotateY: outcome === "edge"
+//         ? 90
+//         : outcome === "heads"
+//           ? 0
+//           : 180,
+//       scale: outcome === "edge" ? 0.8 : 1,
+//       transition: {
+//         duration: 0.5,
+//         ease: "easeOut",
+//       },
+//     },
+//   };
+
+//   const shadowVariants = {
+//     initial: {
+//       scale: 1,
+//       opacity: 0.3,
+//     },
+//     animate: {
+//       scale: isFlipping
+//         ? [1, 0.8, 1, 0.8, 1]
+//         : outcome === "edge"
+//           ? 0.6
+//           : 1,
+//       opacity: isFlipping
+//         ? [0.3, 0.2, 0.3, 0.2, 0.3]
+//         : outcome === "edge"
+//           ? 0.4
+//           : 0.3,
+//       transition: {
+//         duration: isFlipping ? 2.5 : 0.8,
+//         repeat: isFlipping ? Infinity : 0,
+//         ease: "easeInOut",
+//       },
+//     },
+//     result: {
+//       scale: outcome === "edge" ? 0.6 : 1,
+//       opacity: outcome === "edge" ? 0.4 : 0.3,
+//       transition: {
+//         duration: 0.5,
+//         ease: "easeOut",
+//       },
+//     },
+//   };
+
+//   return (
+//     <div className="flex flex-col items-center justify-center min-h-[300px] perspective-1000">
+//       {/* Sound Toggle Button */}
+//       <button
+//         onClick={toggleSound}
+//         className="absolute top-4 right-4 p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors"
+//       >
+//         {isMuted ? (
+//           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+//             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+//             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+//           </svg>
+//         ) : (
+//           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+//             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+//           </svg>
+//         )}
+//       </button>
+
+//       <div className="relative w-full h-full flex justify-center items-center">
+//         {/* Coin Shadow */}
+//         <motion.div
+//           className="absolute bottom-0 w-24 h-4 bg-black/20 rounded-full blur-md"
+//           initial="initial"
+//           animate={showResult ? "result" : "animate"}
+//           variants={shadowVariants}
+//         />
+
+//         {/* Coin */}
+//         <AnimatePresence>
+//           <motion.div
+//             className="relative w-32 h-32 cursor-pointer"
+//             initial="initial"
+//             animate={showResult ? "result" : "flip"}
+//             variants={coinVariants}
+//             style={{
+//               transformStyle: "preserve-3d",
+//               perspective: "1000px"
+//             }}
+//           >
+//             {/* Heads Side */}
+//             <div className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden">
+//               <div className="w-full h-full rounded-full bg-gradient-to-b from-yellow-300 via-yellow-400 to-yellow-500 border-8 border-yellow-500 flex items-center justify-center shadow-inner">
+//                 <div className="text-4xl font-bold text-yellow-800">
+//                   H
+//                 </div>
+//               </div>
+//             </div>
+
+//             {/* Tails Side */}
+//             <div
+//               className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden"
+//               style={{ transform: "rotateY(180deg)" }}
+//             >
+//               <div className="w-full h-full rounded-full bg-gradient-to-b from-gray-300 via-gray-400 to-gray-500 border-8 border-gray-500 flex items-center justify-center shadow-inner">
+//                 <div className="text-4xl font-bold text-gray-800">
+//                   T
+//                 </div>
+//               </div>
+//             </div>
+
+//             {/* Edge Side */}
+//             <div
+//               className="absolute w-full h-8 rounded-full flex items-center justify-center backface-hidden"
+//               style={{
+//                 transform: "rotateY(90deg) translateZ(64px)",
+//                 background: "linear-gradient(to right, #FFD700, #FFA500)"
+//               }}
+//             >
+//               <div className="text-sm font-bold text-yellow-900">
+//                 EDGE
+//               </div>
+//             </div>
+//           </motion.div>
+//         </AnimatePresence>
+//       </div>
+
+//       {/* Outcome Display */}
+//       {(round.outcome && showResult) && (
+//         <motion.div
+//           initial={{ opacity: 0, y: 20 }}
+//           animate={{ opacity: 1, y: 0 }}
+//           exit={{ opacity: 0, y: 20 }}
+//           className={`mt-16 text-3xl font-bold ${
+//             outcome === "edge"
+//               ? "bg-gradient-to-r from-orange-400 to-red-600"
+//               : "bg-gradient-to-r from-yellow-400 to-yellow-600"
+//           } bg-clip-text text-transparent`}
+//         >
+//           {outcome.toUpperCase()} {outcome === "edge" ? "!" : "WINS!"}
+//         </motion.div>
+//       )}
+//     </div>
+//   );
+// }
+// // src/components/CoinFlip.js
+// import React, { useState, useEffect } from "react";
+// import { motion, AnimatePresence } from "framer-motion";
+
+// export default function CoinFlip({ round }) {
+//   const [showResult, setShowResult] = useState(false);
+//   const isFlipping = !round.outcome && !showResult;
+//   const outcome = round?.outcome || "heads";
+
+//   // Reset showResult when a new flip starts
+//   useEffect(() => {
+//     if (!round.outcome) {
+//       setShowResult(false);
+//     }
+//   }, [round]);
+
+//   // Show result for 3 seconds when outcome is determined
+//   useEffect(() => {
+//     if (round.outcome && !showResult) {
+//       setShowResult(true);
+//       const timer = setTimeout(() => {
+//         setShowResult(false);
+//       }, 3000);
+//       return () => clearTimeout(timer);
+//     }
+//   }, [round.outcome, showResult]);
+
+//   const coinVariants = {
+//     initial: {
+//       rotateY: 0,
+//       scale: 1,
+//     },
+//     flip: {
+//       rotateY: isFlipping
+//         ? [0, 180, 360, 540, 720, 900]
+//         : outcome === "edge"
+//           ? 90
+//           : outcome === "heads"
+//             ? 0
+//             : 180,
+//       scale: isFlipping
+//         ? [1, 1.1, 1, 1.1, 1]
+//         : outcome === "edge"
+//           ? 0.8
+//           : 1,
+//       transition: {
+//         duration: isFlipping ? 2.5 : 0.8,
+//         repeat: isFlipping ? Infinity : 0,
+//         ease: isFlipping ? "easeInOut" : "easeOut",
+//       },
+//     },
+//     result: {
+//       rotateY: outcome === "edge"
+//         ? 90
+//         : outcome === "heads"
+//           ? 0
+//           : 180,
+//       scale: outcome === "edge" ? 0.8 : 1,
+//       transition: {
+//         duration: 0.5,
+//         ease: "easeOut",
+//       },
+//     },
+//   };
+
+//   const shadowVariants = {
+//     initial: {
+//       scale: 1,
+//       opacity: 0.3,
+//     },
+//     animate: {
+//       scale: isFlipping
+//         ? [1, 0.8, 1, 0.8, 1]
+//         : outcome === "edge"
+//           ? 0.6
+//           : 1,
+//       opacity: isFlipping
+//         ? [0.3, 0.2, 0.3, 0.2, 0.3]
+//         : outcome === "edge"
+//           ? 0.4
+//           : 0.3,
+//       transition: {
+//         duration: isFlipping ? 2.5 : 0.8,
+//         repeat: isFlipping ? Infinity : 0,
+//         ease: "easeInOut",
+//       },
+//     },
+//     result: {
+//       scale: outcome === "edge" ? 0.6 : 1,
+//       opacity: outcome === "edge" ? 0.4 : 0.3,
+//       transition: {
+//         duration: 0.5,
+//         ease: "easeOut",
+//       },
+//     },
+//   };
+
+//   return (
+//     <div className="flex flex-col items-center justify-center min-h-[300px] perspective-1000">
+//       <div className="relative w-full h-full flex justify-center items-center">
+//         {/* Coin Shadow */}
+//         <motion.div
+//           className="absolute bottom-0 w-24 h-4 bg-black/20 rounded-full blur-md"
+//           initial="initial"
+//           animate={showResult ? "result" : "animate"}
+//           variants={shadowVariants}
+//         />
+
+//         {/* Coin */}
+//         <AnimatePresence>
+//           <motion.div
+//             className="relative w-32 h-32 cursor-pointer"
+//             initial="initial"
+//             animate={showResult ? "result" : "flip"}
+//             variants={coinVariants}
+//             style={{
+//               transformStyle: "preserve-3d",
+//               perspective: "1000px"
+//             }}
+//           >
+//             {/* Heads Side */}
+//             <div className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden">
+//               <div className="w-full h-full rounded-full bg-gradient-to-b from-yellow-300 via-yellow-400 to-yellow-500 border-8 border-yellow-500 flex items-center justify-center shadow-inner">
+//                 <div className="text-4xl font-bold text-yellow-800">
+//                   H
+//                 </div>
+//               </div>
+//             </div>
+
+//             {/* Tails Side */}
+//             <div
+//               className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden"
+//               style={{ transform: "rotateY(180deg)" }}
+//             >
+//               <div className="w-full h-full rounded-full bg-gradient-to-b from-gray-300 via-gray-400 to-gray-500 border-8 border-gray-500 flex items-center justify-center shadow-inner">
+//                 <div className="text-4xl font-bold text-gray-800">
+//                   T
+//                 </div>
+//               </div>
+//             </div>
+
+//             {/* Edge Side */}
+//             <div
+//               className="absolute w-full h-8 rounded-full flex items-center justify-center backface-hidden"
+//               style={{
+//                 transform: "rotateY(90deg) translateZ(64px)",
+//                 background: "linear-gradient(to right, #FFD700, #FFA500)"
+//               }}
+//             >
+//               <div className="text-sm font-bold text-yellow-900">
+//                 EDGE
+//               </div>
+//             </div>
+//           </motion.div>
+//         </AnimatePresence>
+//       </div>
+
+//       {/* Outcome Display */}
+//       {(round.outcome && showResult) && (
+//         <motion.div
+//           initial={{ opacity: 0, y: 20 }}
+//           animate={{ opacity: 1, y: 0 }}
+//           exit={{ opacity: 0, y: 20 }}
+//           className={`mt-16 text-3xl font-bold ${
+//             outcome === "edge"
+//               ? "bg-gradient-to-r from-orange-400 to-red-600"
+//               : "bg-gradient-to-r from-yellow-400 to-yellow-600"
+//           } bg-clip-text text-transparent`}
+//         >
+//           {outcome.toUpperCase()} {outcome === "edge" ? "!" : "WINS!"}
+//         </motion.div>
+//       )}
+//     </div>
+//   );
+// }
+
+
+
+
+
+//#############################################   working ###############################33333
+// // src/components/CoinFlip.js
+// import React from "react";
+// import { motion, AnimatePresence } from "framer-motion";
+
+// export default function CoinFlip({ round }) {
+//   const isFlipping = !round.outcome;
+//   const outcome = round?.outcome || "heads";
+
+//   // Modified coin flip animation variants for horizontal rotation
+//   const coinVariants = {
+//     initial: {
+//       rotateY: 0,
+//       scale: 1,
+//     },
+//     flip: {
+//       rotateY: isFlipping
+//         ? [0, 180, 360, 540, 720, 900]
+//         : outcome === "edge"
+//           ? 90
+//           : outcome === "heads"
+//             ? 0
+//             : 180,
+//       scale: isFlipping
+//         ? [1, 1.1, 1, 1.1, 1]
+//         : outcome === "edge"
+//           ? 0.8
+//           : 1,
+//       transition: {
+//         duration: isFlipping ? 2.5 : 0.8,
+//         repeat: isFlipping ? Infinity : 0,
+//         ease: isFlipping ? "easeInOut" : "easeOut",
+//       },
+//     },
+//   };
+
+//   // Shadow animation variants
+//   const shadowVariants = {
+//     initial: {
+//       scale: 1,
+//       opacity: 0.3,
+//     },
+//     animate: {
+//       scale: isFlipping
+//         ? [1, 0.8, 1, 0.8, 1]
+//         : outcome === "edge"
+//           ? 0.6
+//           : 1,
+//       opacity: isFlipping
+//         ? [0.3, 0.2, 0.3, 0.2, 0.3]
+//         : outcome === "edge"
+//           ? 0.4
+//           : 0.3,
+//       transition: {
+//         duration: isFlipping ? 2.5 : 0.8,
+//         repeat: isFlipping ? Infinity : 0,
+//         ease: "easeInOut",
+//       },
+//     },
+//   };
+
+//   return (
+//     <div className="flex flex-col items-center justify-center min-h-[300px] perspective-1000">
+//       <div className="relative w-full h-full flex justify-center items-center">
+//         {/* Coin Shadow */}
+//         <motion.div
+//           className="absolute bottom-0 w-24 h-4 bg-black/20 rounded-full blur-md"
+//           initial="initial"
+//           animate="animate"
+//           variants={shadowVariants}
+//         />
+
+//         {/* Coin */}
+//         <AnimatePresence>
+//           <motion.div
+//             className="relative w-32 h-32 cursor-pointer"
+//             initial="initial"
+//             animate="flip"
+//             variants={coinVariants}
+//             style={{
+//               transformStyle: "preserve-3d",
+//               perspective: "1000px"
+//             }}
+//           >
+//             {/* Heads Side */}
+//             <div className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden">
+//               <div className="w-full h-full rounded-full bg-gradient-to-b from-yellow-300 via-yellow-400 to-yellow-500 border-8 border-yellow-500 flex items-center justify-center shadow-inner">
+//                 <div className="text-4xl font-bold text-yellow-800">
+//                   H
+//                 </div>
+//               </div>
+//             </div>
+
+//             {/* Tails Side */}
+//             <div
+//               className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden"
+//               style={{ transform: "rotateY(180deg)" }}
+//             >
+//               <div className="w-full h-full rounded-full bg-gradient-to-b from-gray-300 via-gray-400 to-gray-500 border-8 border-gray-500 flex items-center justify-center shadow-inner">
+//                 <div className="text-4xl font-bold text-gray-800">
+//                   T
+//                 </div>
+//               </div>
+//             </div>
+
+//             {/* Edge Side */}
+//             <div
+//               className="absolute w-full h-8 rounded-full flex items-center justify-center backface-hidden"
+//               style={{
+//                 transform: "rotateY(90deg) translateZ(64px)",
+//                 background: "linear-gradient(to right, #FFD700, #FFA500)"
+//               }}
+//             >
+//               <div className="text-sm font-bold text-yellow-900">
+//                 EDGE
+//               </div>
+//             </div>
+//           </motion.div>
+//         </AnimatePresence>
+//       </div>
+
+//       {/* Outcome Display */}
+//       {round.outcome && (
+//         <motion.div
+//           initial={{ opacity: 0, y: 20 }}
+//           animate={{ opacity: 1, y: 0 }}
+//           className={`mt-16 text-3xl font-bold ${
+//             outcome === "edge"
+//               ? "bg-gradient-to-r from-orange-400 to-red-600"
+//               : "bg-gradient-to-r from-yellow-400 to-yellow-600"
+//           } bg-clip-text text-transparent`}
+//         >
+//           {outcome.toUpperCase()} {outcome === "edge" ? "!" : "WINS!"}
+//         </motion.div>
+//       )}
+//     </div>
+//   );
+// }
+
+// // src/components/CoinFlip.js
+// import React from "react";
+// import { motion, AnimatePresence } from "framer-motion";
+
+// export default function CoinFlip({ round }) {
+//   const isFlipping = !round.outcome;
+//   const outcome = round?.outcome || "heads";
+
+//   // Enhanced coin flip animation variants with wobble effect
+//   const coinVariants = {
+//     initial: {
+//       rotateX: 0,
+//       rotateY: 0,
+//       scale: 1,
+//     },
+//     flip: {
+//       rotateX: isFlipping
+//         ? [0, 180, 360, 540, 720, 900]
+//         : outcome === "edge" 
+//           ? 90
+//           : outcome === "heads" 
+//             ? 0 
+//             : 180,
+//       rotateY: isFlipping
+//         ? [0, 30, -30, 30, -30, 0]
+//         : outcome === "edge"
+//           ? [0, -20, 20, -10, 10, 0]
+//           : 0,
+//       scale: isFlipping 
+//         ? [1, 1.1, 1, 1.1, 1]
+//         : outcome === "edge"
+//           ? 0.8
+//           : 1,
+//       transition: {
+//         duration: isFlipping ? 2.5 : 0.8,
+//         repeat: isFlipping ? Infinity : 0,
+//         ease: isFlipping ? "easeInOut" : "easeOut",
+//         rotateY: {
+//           duration: isFlipping ? 2.5 : 0.3,
+//           repeat: outcome === "edge" ? Infinity : 0,
+//           repeatType: "reverse",
+//         }
+//       },
+//     },
+//   };
+
+//   // Shadow animation variants
+//   const shadowVariants = {
+//     initial: {
+//       scale: 1,
+//       opacity: 0.3,
+//     },
+//     animate: {
+//       scale: isFlipping 
+//         ? [1, 0.8, 1, 0.8, 1]
+//         : outcome === "edge" 
+//           ? 0.6
+//           : 1,
+//       opacity: isFlipping 
+//         ? [0.3, 0.2, 0.3, 0.2, 0.3]
+//         : outcome === "edge"
+//           ? 0.4
+//           : 0.3,
+//       transition: {
+//         duration: isFlipping ? 2.5 : 0.8,
+//         repeat: isFlipping ? Infinity : 0,
+//         ease: "easeInOut",
+//       },
+//     },
+//   };
+
+//   return (
+//     <div className="flex flex-col items-center justify-center min-h-[300px] perspective-1000">
+//       <div className="relative w-full h-full flex justify-center items-center">
+//         {/* Coin Shadow */}
+//         <motion.div
+//           className="absolute bottom-0 w-24 h-4 bg-black/20 rounded-full blur-md"
+//           initial="initial"
+//           animate="animate"
+//           variants={shadowVariants}
+//         />
+
+//         {/* Coin */}
+//         <AnimatePresence>
+//           <motion.div
+//             className="relative w-32 h-32 cursor-pointer"
+//             initial="initial"
+//             animate="flip"
+//             variants={coinVariants}
+//             style={{ 
+//               transformStyle: "preserve-3d",
+//               perspective: "1000px"
+//             }}
+//           >
+//             {/* Heads Side */}
+//             <div className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden">
+//               <div className="w-full h-full rounded-full bg-gradient-to-b from-yellow-300 via-yellow-400 to-yellow-500 border-8 border-yellow-500 flex items-center justify-center shadow-inner">
+//                 <div className="text-4xl font-bold text-yellow-800 transform -scale-y-100">
+//                   H
+//                 </div>
+//               </div>
+//             </div>
+
+//             {/* Tails Side */}
+//             <div
+//               className="absolute w-full h-full rounded-full flex items-center justify-center backface-hidden"
+//               style={{ transform: "rotateX(180deg)" }}
+//             >
+//               <div className="w-full h-full rounded-full bg-gradient-to-b from-gray-300 via-gray-400 to-gray-500 border-8 border-gray-500 flex items-center justify-center shadow-inner">
+//                 <div className="text-4xl font-bold text-gray-800 transform -scale-y-100">
+//                   T
+//                 </div>
+//               </div>
+//             </div>
+
+//             {/* Edge Side */}
+//             <div
+//               className="absolute w-full h-8 rounded-full flex items-center justify-center backface-hidden"
+//               style={{ 
+//                 transform: "rotateX(90deg) translateZ(16px)",
+//                 background: "linear-gradient(to right, #FFD700, #FFA500)"
+//               }}
+//             >
+//               <div className="text-sm font-bold text-yellow-900 rotate-180">
+//                 EDGE
+//               </div>
+//             </div>
+//           </motion.div>
+//         </AnimatePresence>
+//       </div>
+
+//       {/* Outcome Display */}
+//       {round.outcome && (
+//         <motion.div
+//           initial={{ opacity: 0, y: 20 }}
+//           animate={{ opacity: 1, y: 0 }}
+//           className={`mt-16 text-3xl font-bold ${
+//             outcome === "edge" 
+//               ? "bg-gradient-to-r from-orange-400 to-red-600"
+//               : "bg-gradient-to-r from-yellow-400 to-yellow-600"
+//           } bg-clip-text text-transparent`}
+//         >
+//           {outcome.toUpperCase()} {outcome === "edge" ? "!" : "WINS!"}
+//         </motion.div>
+//       )}
+//     </div>
+//   );
+// }
 // // src/components/CoinFlip.js
 // import React from "react";
 // import { motion, AnimatePresence } from "framer-motion";
