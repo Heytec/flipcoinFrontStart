@@ -1,55 +1,50 @@
-// // // // // // src/components/BetForm.js
-// src/components/BetForm.js
-
-import React, { useState, useEffect } from 'react';
+// // // // // // // src/components/BetForm.js
+// // src/components/BetForm.js
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { placeBet, clearError } from '../features/roundSlice';
 import { toast } from 'react-toastify';
 import { ERROR_TYPES } from '../constants/errorTypes';
 
-export default function BetForm({ roundId }) {
+const BetForm = ({ roundId }) => {
   const dispatch = useDispatch();
+  const { loading, error, errorDetails } = useSelector(state => state.round);
+  
   const [amount, setAmount] = useState('');
   const [side, setSide] = useState('heads');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const { loading, error, errorDetails } = useSelector(state => state.round);
-  const suggestedAmounts = [10, 20, 50, 100, 200, 500];
+  const suggestedAmounts = useMemo(() => [10, 20, 50, 100, 200, 500], []);
 
-  useEffect(() => {
-    // Clear any existing errors when component mounts or unmounts
-    return () => dispatch(clearError());
-  }, [dispatch]);
-
-  const getErrorMessage = (errorDetails) => {
+  // Error message handler
+  const getErrorMessage = useCallback((errorDetails) => {
     if (!errorDetails) return 'An unexpected error occurred';
-
     switch (errorDetails.type) {
       case ERROR_TYPES.INSUFFICIENT_BALANCE:
-        return `Insufficient balance. You need ${errorDetails.details.deficit} more coins.`;
+        return `Insufficient balance (${errorDetails.details.deficit} needed)`;
       case ERROR_TYPES.BETTING_CLOSED:
-        return 'Betting is closed for this round.';
+        return 'Betting is closed';
       case ERROR_TYPES.DUPLICATE_BET:
-        return `You already placed a bet of ${errorDetails.details.existingBet.amount} on ${errorDetails.details.existingBet.side} for this round.`;
+        return `Existing bet: ${errorDetails.details.existingBet.amount} on ${errorDetails.details.existingBet.side}`;
       case ERROR_TYPES.INVALID_BET_DATA:
-        return errorDetails.message || 'Invalid bet data provided.';
+        return errorDetails.message || 'Invalid bet';
       case ERROR_TYPES.NO_ACTIVE_ROUND:
-        return 'No active round available for betting.';
+        return 'No active round';
       default:
-        return errorDetails.message || 'An error occurred while placing your bet.';
+        return errorDetails.message || 'Bet placement failed';
     }
-  };
+  }, []);
 
-  const onSubmit = async (e) => {
+  // Form submission handler
+  const onSubmit = useCallback(async (e) => {
     e.preventDefault();
     if (!roundId) {
-      toast.error('No active round to bet on!');
+      toast.error('No active round!');
       return;
     }
+    if (isSubmitting || !amount) return;
 
-    if (isSubmitting) return;
     setIsSubmitting(true);
-
     try {
       const result = await dispatch(placeBet({ 
         roundId, 
@@ -57,43 +52,54 @@ export default function BetForm({ roundId }) {
         side 
       })).unwrap();
       
-      toast.success('Your bet has been placed successfully!');
-      setAmount('');
-      
-      // Optional: Show additional success details
-      if (result.bet) {
-        toast.info(`Placed ${result.bet.amount} on ${result.bet.side}`);
-      }
-    } catch (error) {
-      const errorMessage = getErrorMessage(error);
-      toast.error(errorMessage, {
-        autoClose: 5000,
-        position: 'top-center'
+      toast.success(`Bet placed: ${result.bet.amount} on ${result.bet.side}`, {
+        position: 'bottom-right'
       });
+      setAmount('');
+    } catch (err) {
+      toast.error(getErrorMessage(err), { position: 'top-center' });
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [roundId, amount, side, isSubmitting, dispatch, getErrorMessage]);
 
-  const handleSuggestionClick = (value) => {
-    setAmount(value.toString());
-  };
-
-  const handleAmountChange = (e) => {
+  // Amount input handler
+  const handleAmountChange = useCallback((e) => {
     const value = e.target.value;
     if (value === '' || (/^\d*\.?\d*$/.test(value) && !isNaN(parseFloat(value)))) {
       setAmount(value);
     }
-  };
+  }, []);
+
+  // Suggestion click handler
+  const handleSuggestionClick = useCallback((value) => {
+    setAmount(value.toString());
+  }, []);
+
+  // Side selection handler
+  const handleSideSelect = useCallback((selectedSide) => {
+    setSide(selectedSide);
+  }, []);
+
+  // Cleanup effect
+  useEffect(() => {
+    return () => dispatch(clearError());
+  }, [dispatch]);
 
   return (
-    <div className="mt-4 p-4 bg-gray-50 rounded-lg shadow-sm">
-      <h2 className="text-xl font-bold mb-4 text-center">Place Your Bet</h2>
+    <div className="mt-6 p-6 bg-white rounded-xl shadow-lg border border-gray-100">
+      <h2 className="text-xl font-semibold text-gray-800 mb-5 text-center">
+        Place Your Bet
+      </h2>
 
-      <form onSubmit={onSubmit}>
-        <div className="mb-4">
-          <label htmlFor="amount" className="block text-gray-700 mb-1 text-center">
-            Bet Amount:
+      <form onSubmit={onSubmit} className="space-y-6">
+        {/* Amount Section */}
+        <div>
+          <label 
+            htmlFor="amount" 
+            className="block text-sm font-medium text-gray-700 mb-2 text-center"
+          >
+            Bet Amount (Ksh)
           </label>
           <input
             id="amount"
@@ -103,37 +109,40 @@ export default function BetForm({ roundId }) {
             value={amount}
             onChange={handleAmountChange}
             required
-            disabled={isSubmitting}
-            className="w-full border rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+            disabled={isSubmitting || loading}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 transition-colors duration-200"
           />
-          <div className="mt-2 flex flex-wrap justify-center gap-2">
+          <div className="mt-3 grid grid-cols-3 gap-2">
             {suggestedAmounts.map((value) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => handleSuggestionClick(value)}
-                disabled={isSubmitting}
-                className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 focus:outline-none disabled:bg-blue-300"
+                disabled={isSubmitting || loading}
+                className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg hover:bg-blue-200 focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-200 disabled:text-gray-500 transition-colors duration-200 text-sm"
               >
-                Ksh{value}
+                {value}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="mb-4">
-          <span className="block text-gray-700 mb-1 text-center">Choose Side:</span>
-          <div className="flex space-x-4">
+        {/* Side Selection */}
+        <div>
+          <span className="block text-sm font-medium text-gray-700 mb-2 text-center">
+            Choose Your Side
+          </span>
+          <div className="grid grid-cols-2 gap-4">
             {['heads', 'tails'].map((option) => (
               <button
                 key={option}
                 type="button"
-                onClick={() => setSide(option)}
-                disabled={isSubmitting}
-                className={`flex-1 border rounded p-2 text-center focus:outline-none transition-colors ${
+                onClick={() => handleSideSelect(option)}
+                disabled={isSubmitting || loading}
+                className={`py-3 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
                   side === option
-                    ? 'bg-green-500 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-100'
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 } disabled:opacity-50`}
               >
                 {option.charAt(0).toUpperCase() + option.slice(1)}
@@ -142,26 +151,192 @@ export default function BetForm({ roundId }) {
           </div>
         </div>
 
-        <div className="flex justify-center">
-          <button
-            type="submit"
-            disabled={isSubmitting || loading}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none disabled:bg-green-400 disabled:cursor-not-allowed flex items-center space-x-2"
-          >
-            {isSubmitting || loading ? (
-              <>
-                <span className="animate-spin">↻</span>
-                <span>Placing Bet...</span>
-              </>
-            ) : (
-              'Place Bet'
-            )}
-          </button>
-        </div>
+        {/* Submit Button */}
+        <button
+          type="submit"
+          disabled={isSubmitting || loading || !amount}
+          className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-2"
+        >
+          {isSubmitting || loading ? (
+            <>
+              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8h8a8 8 0 01-8 8v-8H4z" />
+              </svg>
+              <span>Processing...</span>
+            </>
+          ) : (
+            'Place Bet'
+          )}
+        </button>
       </form>
     </div>
   );
-}
+};
+
+export default React.memo(BetForm);
+
+// import React, { useState, useEffect } from 'react';
+// import { useDispatch, useSelector } from 'react-redux';
+// import { placeBet, clearError } from '../features/roundSlice';
+// import { toast } from 'react-toastify';
+// import { ERROR_TYPES } from '../constants/errorTypes';
+
+// export default function BetForm({ roundId }) {
+//   const dispatch = useDispatch();
+//   const [amount, setAmount] = useState('');
+//   const [side, setSide] = useState('heads');
+//   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+//   const { loading, error, errorDetails } = useSelector(state => state.round);
+//   const suggestedAmounts = [10, 20, 50, 100, 200, 500];
+
+//   useEffect(() => {
+//     // Clear any existing errors when component mounts or unmounts
+//     return () => dispatch(clearError());
+//   }, [dispatch]);
+
+//   const getErrorMessage = (errorDetails) => {
+//     if (!errorDetails) return 'An unexpected error occurred';
+
+//     switch (errorDetails.type) {
+//       case ERROR_TYPES.INSUFFICIENT_BALANCE:
+//         return `Insufficient balance. You need ${errorDetails.details.deficit} more coins.`;
+//       case ERROR_TYPES.BETTING_CLOSED:
+//         return 'Betting is closed for this round.';
+//       case ERROR_TYPES.DUPLICATE_BET:
+//         return `You already placed a bet of ${errorDetails.details.existingBet.amount} on ${errorDetails.details.existingBet.side} for this round.`;
+//       case ERROR_TYPES.INVALID_BET_DATA:
+//         return errorDetails.message || 'Invalid bet data provided.';
+//       case ERROR_TYPES.NO_ACTIVE_ROUND:
+//         return 'No active round available for betting.';
+//       default:
+//         return errorDetails.message || 'An error occurred while placing your bet.';
+//     }
+//   };
+
+//   const onSubmit = async (e) => {
+//     e.preventDefault();
+//     if (!roundId) {
+//       toast.error('No active round to bet on!');
+//       return;
+//     }
+
+//     if (isSubmitting) return;
+//     setIsSubmitting(true);
+
+//     try {
+//       const result = await dispatch(placeBet({ 
+//         roundId, 
+//         amount: parseFloat(amount), 
+//         side 
+//       })).unwrap();
+      
+//       toast.success('Your bet has been placed successfully!');
+//       setAmount('');
+      
+//       // Optional: Show additional success details
+//       if (result.bet) {
+//         toast.info(`Placed ${result.bet.amount} on ${result.bet.side}`);
+//       }
+//     } catch (error) {
+//       const errorMessage = getErrorMessage(error);
+//       toast.error(errorMessage, {
+//         autoClose: 5000,
+//         position: 'top-center'
+//       });
+//     } finally {
+//       setIsSubmitting(false);
+//     }
+//   };
+
+//   const handleSuggestionClick = (value) => {
+//     setAmount(value.toString());
+//   };
+
+//   const handleAmountChange = (e) => {
+//     const value = e.target.value;
+//     if (value === '' || (/^\d*\.?\d*$/.test(value) && !isNaN(parseFloat(value)))) {
+//       setAmount(value);
+//     }
+//   };
+
+//   return (
+//     <div className="mt-4 p-4 bg-gray-50 rounded-lg shadow-sm">
+//       <h2 className="text-xl font-bold mb-4 text-center">Place Your Bet</h2>
+
+//       <form onSubmit={onSubmit}>
+//         <div className="mb-4">
+//           <label htmlFor="amount" className="block text-gray-700 mb-1 text-center">
+//             Bet Amount:
+//           </label>
+//           <input
+//             id="amount"
+//             type="text"
+//             inputMode="decimal"
+//             placeholder="Enter amount"
+//             value={amount}
+//             onChange={handleAmountChange}
+//             required
+//             disabled={isSubmitting}
+//             className="w-full border rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+//           />
+//           <div className="mt-2 flex flex-wrap justify-center gap-2">
+//             {suggestedAmounts.map((value) => (
+//               <button
+//                 key={value}
+//                 type="button"
+//                 onClick={() => handleSuggestionClick(value)}
+//                 disabled={isSubmitting}
+//                 className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 focus:outline-none disabled:bg-blue-300"
+//               >
+//                 Ksh{value}
+//               </button>
+//             ))}
+//           </div>
+//         </div>
+
+//         <div className="mb-4">
+//           <span className="block text-gray-700 mb-1 text-center">Choose Side:</span>
+//           <div className="flex space-x-4">
+//             {['heads', 'tails'].map((option) => (
+//               <button
+//                 key={option}
+//                 type="button"
+//                 onClick={() => setSide(option)}
+//                 disabled={isSubmitting}
+//                 className={`flex-1 border rounded p-2 text-center focus:outline-none transition-colors ${
+//                   side === option
+//                     ? 'bg-green-500 text-white'
+//                     : 'bg-white text-gray-700 hover:bg-gray-100'
+//                 } disabled:opacity-50`}
+//               >
+//                 {option.charAt(0).toUpperCase() + option.slice(1)}
+//               </button>
+//             ))}
+//           </div>
+//         </div>
+
+//         <div className="flex justify-center">
+//           <button
+//             type="submit"
+//             disabled={isSubmitting || loading}
+//             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none disabled:bg-green-400 disabled:cursor-not-allowed flex items-center space-x-2"
+//           >
+//             {isSubmitting || loading ? (
+//               <>
+//                 <span className="animate-spin">↻</span>
+//                 <span>Placing Bet...</span>
+//               </>
+//             ) : (
+//               'Place Bet'
+//             )}
+//           </button>
+//         </div>
+//       </form>
+//     </div>
+//   );
+// }
 
 // import React, { useState } from 'react';
 // import { useDispatch } from 'react-redux';

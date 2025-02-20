@@ -7,8 +7,6 @@ import {
   roundUpdated,
   roundResultReceived,
   betResultReceived,
-  //aggregatedBetResultsReceived,
-  //participantResultsReceived,
   jackpotUpdated,
 } from "../features/roundSlice";
 
@@ -37,14 +35,7 @@ const useAblyGameRoom = () => {
       console.log("Received individualBetUpdate event:", msg.data);
       dispatch(betResultReceived(msg.data));
     });
-    // channel.subscribe("aggregatedBetResults", (msg) => {
-    //   console.log("Received aggregatedBetResults event:", msg.data);
-    //   dispatch(aggregatedBetResultsReceived(msg.data));
-    // });
-    // channel.subscribe("participantResults", (msg) => {
-    //   console.log("Received participantResults event:", msg.data);
-    //   dispatch(participantResultsReceived(msg.data));
-    // });
+  
     channel.subscribe("jackpotUpdate", (msg) => {
       console.log("Received jackpotUpdate event:", msg.data);
       dispatch(jackpotUpdated(msg.data));

@@ -104,6 +104,7 @@ export const verifyOTP = createAsyncThunk(
       const errorData = extractError(error);
       
       // Add action suggestions based on error code
+      // eslint-disable-next-line default-case
       switch (errorData.code) {
         case AUTH_ERROR_TYPES.USER_EXISTS:
           errorData.suggestion = 'Please login instead';
