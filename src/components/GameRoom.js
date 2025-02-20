@@ -16,15 +16,25 @@ import NoActiveRound from "./NoActiveRound";
 import LoadingSpinner from "./LoadingSpinner";
 import GameRoomTabs from "./GameRoomTabs";
 
+// export const formatResultMessage = (round) => {
+//   if (!round?.outcome) return null;
+//   return {
+//     message: `Round ${round.roundNumber}: ${
+//       round.outcome.charAt(0).toUpperCase() + round.outcome.slice(1)
+//     } wins!`,
+//     type: "info",
+//   };
+// };
 export const formatResultMessage = (round) => {
-  if (!round?.outcome) return null;
+  if (!round?.outcome) {
+    return { message: "Round outcome not available", type: "info" };
+  }
   return {
-    message: `Round ${round.roundNumber}: ${
-      round.outcome.charAt(0).toUpperCase() + round.outcome.slice(1)
-    } wins!`,
+    message: `Round ${round.roundNumber}: ${round.outcome.charAt(0).toUpperCase() + round.outcome.slice(1)} wins!`,
     type: "info",
   };
 };
+
 
 export const getErrorMessage = (err) => {
   return err?.message || (typeof err === "string" ? err : JSON.stringify(err)) || "";
