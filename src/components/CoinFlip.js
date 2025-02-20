@@ -16,7 +16,7 @@ export default function CoinFlip({ round }) {
   // Initialize audio only once after user interaction
   const initializeAudio = () => {
     if (!isAudioInitialized) {
-      flipSoundRef.current = new Audio("/sounds/coin-flip.mp3");
+      flipSoundRef.current = new Audio("/sounds/coi.mp3");
       resultSoundRef.current = new Audio("/sounds/result-chime.mp3");
       edgeSoundRef.current = new Audio("/sounds/edge-special.mp3");
 

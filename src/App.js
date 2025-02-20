@@ -15,9 +15,6 @@ import { persistor } from "./app/store";
 
 // Components
 import GameRoom from "./components/GameRoom";
-import Leaderboard from "./components/Leaderboard";
-import LiveChat from "./components/LiveChat";
-import UserBets from "./components/UserBets";
 import Profile from "./components/Profile";
 import Login from "./components/Login";
 import Register from "./components/Register";
