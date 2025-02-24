@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from "react"
 import { useDispatch, useSelector } from "react-redux";
 import { clearError, fetchCurrentRound } from "../features/roundSlice";
 import useAblyGameRoom from "../hooks/useAblyGameRoom";
+import useBalanceRealtime from "../hooks/useBalanceRealtime";
 import BetForm from "./BetForm";
 import CoinFlip from "./CoinFlip";
 import UserBets from "./UserBets";
@@ -85,6 +86,8 @@ const GameRoom = () => {
   const processedBetsRef = useRef(new Set());
 
   useAblyGameRoom();
+  useBalanceRealtime();
+
 
   const errorMsg = useMemo(() => getErrorMessage(error), [error]);
   const noActiveRoundError = useMemo(() => {
