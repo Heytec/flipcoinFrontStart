@@ -15,6 +15,17 @@ import ToastContainerWrapper from "./ToastContainerWrapper";
 import NoActiveRound from "./NoActiveRound";
 import LoadingSpinner from "./LoadingSpinner";
 import GameRoomTabs from "./GameRoomTabs";
+import {
+  ENABLE_BOTS,
+  BOT_RESULTS_DISPLAY_TIME,
+  createInitialBots,
+  updateBotBetResults,
+  generateBotBet,
+  isRoundActive,
+  filterBotsForRound,
+  MAX_BOTS_PER_ROUND,
+  BOT_BET_INTERVAL
+} from "../services/botService";
 
 // Debounce utility
 function debounce(func, wait) {
@@ -25,28 +36,21 @@ function debounce(func, wait) {
   };
 }
 
-// Toast wrapper to log and guard against null/undefined
+// Toast wrapper
 const toast = {
   success: (message, options) => {
-    console.log("toast.success called:", { message, options });
     if (message) originalToast.success(message, options);
-    else console.warn("Blocked null/undefined toast.success");
   },
   error: (message, options) => {
-    console.log("toast.error called:", { message, options });
     if (message) originalToast.error(message, options);
-    else console.warn("Blocked null/undefined toast.error");
   },
   info: (message, options) => {
-    console.log("toast.info called:", { message, options });
     if (message) originalToast.info(message, options);
-    else console.warn("Blocked null/undefined toast.info");
   },
   dismiss: () => originalToast.dismiss(),
 };
 
 export const formatResultMessage = (round) => {
-  console.log("formatResultMessage called with:", round);
   if (!round?.outcome) {
     return { message: "Round outcome not available", type: "info" };
   }
@@ -59,17 +63,8 @@ export const formatResultMessage = (round) => {
 };
 
 export const getErrorMessage = (err) => {
-  // Return empty string for null/undefined to avoid "null" string
-  if (!err) {
-    console.log("getErrorMessage called with null/undefined, returned: ''");
-    return "";
-  }
-  const msg =
-    err?.message ||
-    (typeof err === "string" ? err : JSON.stringify(err)) ||
-    "";
-  console.log("getErrorMessage called with:", err, "returned:", msg);
-  return msg;
+  if (!err) return "";
+  return err?.message || (typeof err === "string" ? err : JSON.stringify(err)) || "";
 };
 
 const GameRoom = () => {
@@ -81,21 +76,22 @@ const GameRoom = () => {
 
   const [timeLeft, setTimeLeft] = useState(0);
   const [activeTab, setActiveTab] = useState("activeBet");
+  const [botBets, setBotBets] = useState([]); // State for bot bets
+  const [processingRound, setProcessingRound] = useState(false); // State to track round processing
   const timerRef = useRef(null);
   const autoRefreshRef = useRef(null);
+  const botIntervalRef = useRef(null);
+  const botClearTimeoutRef = useRef(null);
   const processedBetsRef = useRef(new Set());
+  const lastRoundIdRef = useRef(null); // Track the last round ID
+  const roundChangeDetectedRef = useRef(false); // Track round changes
 
   useAblyGameRoom();
   useBalanceRealtime();
 
-
   const errorMsg = useMemo(() => getErrorMessage(error), [error]);
   const noActiveRoundError = useMemo(() => {
-    const result =
-      !loading &&
-      (errorMsg.toLowerCase().includes("no active round") || !currentRound);
-    console.log("noActiveRoundError:", result, { loading, errorMsg, currentRound });
-    return result;
+    return !loading && (errorMsg.toLowerCase().includes("no active round") || !currentRound);
   }, [loading, currentRound, errorMsg]);
 
   const userActiveBets = useMemo(() => {
@@ -117,21 +113,28 @@ const GameRoom = () => {
     );
   }, [betResults, authUser, currentRound]);
 
-  const currentBets = useMemo(
-    () => ({
+  const currentBets = useMemo(() => {
+    console.log("Calculating currentBets:", { botBets, betResults, currentRoundId: currentRound?._id });
+    const realBets = {
       head: betResults.filter(
         (bet) => bet.side === "heads" && bet.roundId === currentRound?._id
       ),
       tail: betResults.filter(
         (bet) => bet.side === "tails" && bet.roundId === currentRound?._id
       ),
-    }),
-    [betResults, currentRound]
-  );
+    };
+    const botHeadBets = botBets.filter((bet) => bet.side === "heads" && bet.roundId === currentRound?._id);
+    const botTailBets = botBets.filter((bet) => bet.side === "tails" && bet.roundId === currentRound?._id);
+    const result = {
+      head: [...realBets.head, ...botHeadBets],
+      tail: [...realBets.tail, ...botTailBets],
+    };
+    console.log("currentBets result:", result);
+    return result;
+  }, [betResults, botBets, currentRound]);
 
   const handleBetResult = useCallback(
     (bet) => {
-      console.log("handleBetResult called with:", bet);
       const betKey = `${bet.betId || bet._id}_${bet.result}`;
       if (
         !authUser ||
@@ -139,7 +142,6 @@ const GameRoom = () => {
         !bet.result ||
         processedBetsRef.current.has(betKey)
       ) {
-        console.log("handleBetResult skipped:", { betKey, authUser, currentRound });
         return;
       }
 
@@ -167,8 +169,6 @@ const GameRoom = () => {
           className: `toast-${bet.result}`,
           toastId: betKey,
         });
-      } else {
-        console.warn("No message generated for bet result:", bet);
       }
     },
     [authUser, currentRound]
@@ -176,7 +176,6 @@ const GameRoom = () => {
 
   const handleRefresh = useCallback(
     debounce(async () => {
-      console.log("handleRefresh triggered");
       toast.dismiss();
       try {
         await dispatch(fetchCurrentRound()).unwrap();
@@ -188,17 +187,161 @@ const GameRoom = () => {
     [dispatch]
   );
 
+  // Detect round changes
   useEffect(() => {
-    console.log("betResults useEffect:", { betResults, authUser, currentRound });
-    if (!betResults.length || !authUser || !currentRound) return;
+    if (!currentRound) return;
+    
+    // Check if this is a new round
+    if (lastRoundIdRef.current && lastRoundIdRef.current !== currentRound._id) {
+      console.log("New round detected:", currentRound._id, "Previous:", lastRoundIdRef.current);
+      roundChangeDetectedRef.current = true;
+      
+      // Clear any existing bot clearing timeout
+      if (botClearTimeoutRef.current) {
+        clearTimeout(botClearTimeoutRef.current);
+        botClearTimeoutRef.current = null;
+      }
+      
+      // Reset processing state for new round
+      setProcessingRound(false);
+      
+      // Clear bots from previous round immediately when new round starts
+      setBotBets(prevBots => filterBotsForRound(prevBots, currentRound._id));
+    }
+    
+    // Update the last round ID reference
+    lastRoundIdRef.current = currentRound._id;
+    
+  }, [currentRound]);
 
+  // Handle round outcome changes
+  useEffect(() => {
+    if (!currentRound) return;
+    
+    // If we have a new round outcome that isn't null or "processing"
+    if (currentRound.outcome && currentRound.outcome !== "processing") {
+      console.log("Round outcome detected:", currentRound.outcome);
+      
+      // Update bot bet results
+      setBotBets((prev) => 
+        updateBotBetResults(
+          filterBotsForRound(prev, currentRound._id),
+          currentRound.outcome
+        )
+      );
+      
+      // Mark the round as processing
+      setProcessingRound(true);
+      
+      // Clear any existing timeout
+      if (botClearTimeoutRef.current) {
+        clearTimeout(botClearTimeoutRef.current);
+      }
+      
+      // Set a new timeout to clear the bots after the display time
+      botClearTimeoutRef.current = setTimeout(() => {
+        console.log("Scheduled bot clearing triggered after outcome display");
+        // Only clear if we're still on the same round
+        setBotBets((prev) => {
+          // If we already have a new round, don't clear
+          if (lastRoundIdRef.current !== currentRound._id) {
+            console.log("Round has changed, not clearing bot bets");
+            return prev;
+          }
+          console.log("Clearing bot bets for completed round");
+          return filterBotsForRound(prev, null); // Filter out bets from the current round
+        });
+        
+        // Reset processing state
+        setProcessingRound(false);
+      }, BOT_RESULTS_DISPLAY_TIME);
+    }
+    
+    return () => {
+      if (botClearTimeoutRef.current) {
+        clearTimeout(botClearTimeoutRef.current);
+      }
+    };
+  }, [currentRound]);
+
+  // Bot simulation logic for adding bets
+  useEffect(() => {
+    if (!ENABLE_BOTS || !currentRound) {
+      console.log("Bots disabled or no current round");
+      return;
+    }
+
+    // Only manage bot betting if the round is active and we're not in processing state
+    if (isRoundActive(currentRound) && !processingRound) {
+      console.log("Bot simulation effect for active round:", currentRound._id);
+
+      // Initialize bots for a new round
+      if (roundChangeDetectedRef.current || 
+          !botBets.some(bet => bet.roundId === currentRound._id)) {
+        console.log("Initializing bots for new round:", currentRound._id);
+        
+        // Reset the round change flag
+        roundChangeDetectedRef.current = false;
+        
+        const initialBets = createInitialBots(currentRound._id);
+        
+        setBotBets((prev) => {
+          // Filter out bets from previous rounds and add new ones
+          const filteredPrev = filterBotsForRound(prev, currentRound._id);
+          return [...filteredPrev, ...initialBets];
+        });
+
+        // Start interval for adding new bots during active round
+        if (botIntervalRef.current) {
+          clearInterval(botIntervalRef.current);
+        }
+        
+        botIntervalRef.current = setInterval(() => {
+          if (isRoundActive(currentRound)) {
+            console.log("Adding new bot bet if below max");
+            setBotBets((prev) => {
+              const currentRoundBets = filterBotsForRound(prev, currentRound._id);
+              if (currentRoundBets.length < MAX_BOTS_PER_ROUND) {
+                const newBet = generateBotBet(currentRound._id);
+                console.log("Adding new bot bet:", newBet);
+                return [...prev, newBet];
+              }
+              console.log("Max bots reached, no new bet added");
+              return prev;
+            });
+          } else {
+            // Stop adding bots if round is no longer active
+            if (botIntervalRef.current) {
+              clearInterval(botIntervalRef.current);
+            }
+          }
+        }, BOT_BET_INTERVAL);
+      }
+    } else {
+      // Stop the interval if round is no longer active
+      if (botIntervalRef.current) {
+        clearInterval(botIntervalRef.current);
+        botIntervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (botIntervalRef.current) {
+        clearInterval(botIntervalRef.current);
+      }
+    };
+  }, [currentRound, processingRound, botBets]);
+
+  // Process bet results
+  useEffect(() => {
+    if (!betResults.length || !authUser || !currentRound) return;
     betResults.forEach((bet) => {
       if (bet.result) handleBetResult(bet);
     });
   }, [betResults, handleBetResult, authUser, currentRound]);
 
+  // Timer management
   useEffect(() => {
-    console.log("currentRound useEffect:", currentRound);
     if (!currentRound) return;
 
     if (currentRound.outcome && currentRound.outcome !== "processing") {
@@ -221,29 +364,34 @@ const GameRoom = () => {
     return () => clearInterval(timerRef.current);
   }, [currentRound]);
 
+  // Auto refresh when no active round
   useEffect(() => {
-    console.log("noActiveRoundError useEffect:", noActiveRoundError);
     if (noActiveRoundError) {
       autoRefreshRef.current = setInterval(() => dispatch(fetchCurrentRound()), 10000);
       return () => clearInterval(autoRefreshRef.current);
     }
   }, [noActiveRoundError, dispatch]);
 
+  // Error handling
   useEffect(() => {
-    console.log("errorMsg useEffect:", errorMsg);
-    // Only show toast for meaningful errors
     if (
       errorMsg &&
       !errorMsg.toLowerCase().includes("no active round") &&
-      errorMsg !== "null" // Explicitly block "null" string
+      errorMsg !== "null"
     ) {
       toast.error(errorMsg);
     }
   }, [errorMsg]);
 
+  // Clear all intervals on unmount
   useEffect(() => {
-    console.log("Component mounted or updated:", { loading, currentRound, betResults });
-  }, [loading, currentRound, betResults]);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+      if (botIntervalRef.current) clearInterval(botIntervalRef.current);
+      if (botClearTimeoutRef.current) clearTimeout(botClearTimeoutRef.current);
+    };
+  }, []);
 
   if (!authUser) {
     return (
@@ -365,6 +513,930 @@ const GameRoom = () => {
 };
 
 export default React.memo(GameRoom);
+
+// import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
+// import { useDispatch, useSelector } from "react-redux";
+// import { clearError, fetchCurrentRound } from "../features/roundSlice";
+// import useAblyGameRoom from "../hooks/useAblyGameRoom";
+// import useBalanceRealtime from "../hooks/useBalanceRealtime";
+// import BetForm from "./BetForm";
+// import CoinFlip from "./CoinFlip";
+// import UserBets from "./UserBets";
+// import TopWinsBets from "./TopWinsBets";
+// import ActiveBet from "./ActiveBet";
+// import BetUpdates from "./BetUpdates";
+// import RoundHistory from "./RoundHistory";
+// import { toast as originalToast } from "react-toastify";
+// import ToastContainerWrapper from "./ToastContainerWrapper";
+// import NoActiveRound from "./NoActiveRound";
+// import LoadingSpinner from "./LoadingSpinner";
+// import GameRoomTabs from "./GameRoomTabs";
+
+// // Bot Configuration Constants
+// const ENABLE_BOTS = true; // Toggle to enable/disable bots
+// const INITIAL_NUMBER_OF_BOTS = 5; // Initial number of bots at round start
+// const BOT_BET_INTERVAL = 3000; // Interval for adding new bot bets
+// const MAX_BOTS_PER_ROUND = 10; // Maximum number of bots to prevent overcrowding
+// const BOT_WIN_MULTIPLIER = 2; // Example multiplier for winning bets
+// const BOT_RESULTS_DISPLAY_TIME = 15000; // Increased from 5000 to 15000 ms (15 seconds)
+
+// // Debounce utility
+// function debounce(func, wait) {
+//   let timeout;
+//   return (...args) => {
+//     clearTimeout(timeout);
+//     timeout = setTimeout(() => func(...args), wait);
+//   };
+// }
+
+// // Toast wrapper
+// const toast = {
+//   success: (message, options) => {
+//     if (message) originalToast.success(message, options);
+//   },
+//   error: (message, options) => {
+//     if (message) originalToast.error(message, options);
+//   },
+//   info: (message, options) => {
+//     if (message) originalToast.info(message, options);
+//   },
+//   dismiss: () => originalToast.dismiss(),
+// };
+
+// // Utility to generate a random bot phone number
+// const generateBotPhone = () => {
+//   const areaCode = Math.floor(Math.random() * 900) + 100;
+//   const middle = Math.floor(Math.random() * 900) + 100;
+//   const last = Math.floor(Math.random() * 9000) + 1000;
+//   return `${areaCode}${middle}${last}`;
+// };
+
+// // Utility to generate a random bot bet
+// const generateBotBet = (roundId) => ({
+//   betId: `bot_${Math.random().toString(36).substr(2, 9)}`,
+//   phone: generateBotPhone(),
+//   betAmount: (Math.floor(Math.random() * 100) + 1) / 10, // Random amount between 0.1 and 10
+//   side: Math.random() > 0.5 ? "heads" : "tails",
+//   roundId,
+//   result: null,
+//   winAmount: 0,
+//   lossAmount: 0,
+// });
+
+// // Utility to update bot bet results based on round outcome
+// const updateBotBetResults = (bets, outcome) => {
+//   return bets.map((bet) => {
+//     if (bet.result) return bet; // Skip if already processed
+//     const isWin = bet.side === outcome;
+//     return {
+//       ...bet,
+//       result: isWin ? "win" : "loss",
+//       winAmount: isWin ? bet.betAmount * BOT_WIN_MULTIPLIER : 0,
+//       lossAmount: !isWin ? bet.betAmount : 0,
+//     };
+//   });
+// };
+
+// export const formatResultMessage = (round) => {
+//   if (!round?.outcome) {
+//     return { message: "Round outcome not available", type: "info" };
+//   }
+//   return {
+//     message: `Round ${round.roundNumber}: ${
+//       round.outcome.charAt(0).toUpperCase() + round.outcome.slice(1)
+//     } wins!`,
+//     type: "info",
+//   };
+// };
+
+// export const getErrorMessage = (err) => {
+//   if (!err) return "";
+//   return err?.message || (typeof err === "string" ? err : JSON.stringify(err)) || "";
+// };
+
+// const GameRoom = () => {
+//   const dispatch = useDispatch();
+//   const { currentRound, jackpot, betResults = [], loading, error } = useSelector(
+//     (state) => state.round
+//   );
+//   const authUser = useSelector((state) => state.auth.user);
+
+//   const [timeLeft, setTimeLeft] = useState(0);
+//   const [activeTab, setActiveTab] = useState("activeBet");
+//   const [botBets, setBotBets] = useState([]); // State for bot bets
+//   const [processingRound, setProcessingRound] = useState(false); // New state to track round processing
+//   const timerRef = useRef(null);
+//   const autoRefreshRef = useRef(null);
+//   const botIntervalRef = useRef(null);
+//   const botClearTimeoutRef = useRef(null); // New ref to track the bot clearing timeout
+//   const processedBetsRef = useRef(new Set());
+//   const lastRoundIdRef = useRef(null); // Track the last round ID
+//   const roundChangeDetectedRef = useRef(false); // New ref to track round changes
+
+//   useAblyGameRoom();
+//   useBalanceRealtime();
+
+//   const errorMsg = useMemo(() => getErrorMessage(error), [error]);
+//   const noActiveRoundError = useMemo(() => {
+//     return !loading && (errorMsg.toLowerCase().includes("no active round") || !currentRound);
+//   }, [loading, currentRound, errorMsg]);
+
+//   const userActiveBets = useMemo(() => {
+//     if (!authUser || !currentRound) return [];
+//     return betResults.filter(
+//       (bet) =>
+//         bet.roundId === currentRound._id &&
+//         (bet.user === authUser._id || bet.phone === authUser.phone)
+//     );
+//   }, [betResults, currentRound, authUser]);
+
+//   const canBet = useMemo(() => {
+//     if (!authUser || !currentRound) return false;
+//     return !betResults.some(
+//       (bet) =>
+//         bet.roundId === currentRound._id &&
+//         (bet.user === authUser._id || bet.phone === authUser.phone) &&
+//         !bet.result
+//     );
+//   }, [betResults, authUser, currentRound]);
+
+//   const currentBets = useMemo(() => {
+//     console.log("Calculating currentBets:", { botBets, betResults, currentRoundId: currentRound?._id });
+//     const realBets = {
+//       head: betResults.filter(
+//         (bet) => bet.side === "heads" && bet.roundId === currentRound?._id
+//       ),
+//       tail: betResults.filter(
+//         (bet) => bet.side === "tails" && bet.roundId === currentRound?._id
+//       ),
+//     };
+//     const botHeadBets = botBets.filter((bet) => bet.side === "heads" && bet.roundId === currentRound?._id);
+//     const botTailBets = botBets.filter((bet) => bet.side === "tails" && bet.roundId === currentRound?._id);
+//     const result = {
+//       head: [...realBets.head, ...botHeadBets],
+//       tail: [...realBets.tail, ...botTailBets],
+//     };
+//     console.log("currentBets result:", result);
+//     return result;
+//   }, [betResults, botBets, currentRound]);
+
+//   const handleBetResult = useCallback(
+//     (bet) => {
+//       const betKey = `${bet.betId || bet._id}_${bet.result}`;
+//       if (
+//         !authUser ||
+//         !currentRound ||
+//         !bet.result ||
+//         processedBetsRef.current.has(betKey)
+//       ) {
+//         return;
+//       }
+
+//       const isUserBet = bet.user === authUser._id || bet.phone === authUser.phone;
+//       if (!isUserBet || bet.gameRound !== currentRound._id) return;
+
+//       processedBetsRef.current.add(betKey);
+//       const amount =
+//         bet.result === "win"
+//           ? bet.winAmount || bet.betAmount
+//           : bet.lossAmount || bet.betAmount;
+//       const message =
+//         bet.result === "win"
+//           ? `🎉 Round #${currentRound.roundNumber}: You won $${Number(amount).toFixed(2)}!`
+//           : `💫 Round #${currentRound.roundNumber}: You lost $${Number(amount).toFixed(2)}`;
+
+//       if (message) {
+//         toast[bet.result === "win" ? "success" : "error"](message, {
+//           position: "top-center",
+//           autoClose: 5000,
+//           hideProgressBar: false,
+//           closeOnClick: true,
+//           pauseOnHover: true,
+//           draggable: true,
+//           className: `toast-${bet.result}`,
+//           toastId: betKey,
+//         });
+//       }
+//     },
+//     [authUser, currentRound]
+//   );
+
+//   const handleRefresh = useCallback(
+//     debounce(async () => {
+//       toast.dismiss();
+//       try {
+//         await dispatch(fetchCurrentRound()).unwrap();
+//         toast.success("Game refreshed");
+//       } catch (err) {
+//         toast.error("Refresh failed");
+//       }
+//     }, 500),
+//     [dispatch]
+//   );
+
+//   // Helper to check if round is active
+//   const isRoundActive = useCallback((round) => {
+//     return !round?.outcome || round.outcome === "processing";
+//   }, []);
+
+//   // Detect round changes
+//   useEffect(() => {
+//     if (!currentRound) return;
+    
+//     // Check if this is a new round
+//     if (lastRoundIdRef.current && lastRoundIdRef.current !== currentRound._id) {
+//       console.log("New round detected:", currentRound._id, "Previous:", lastRoundIdRef.current);
+//       roundChangeDetectedRef.current = true;
+      
+//       // Clear any existing bot clearing timeout
+//       if (botClearTimeoutRef.current) {
+//         clearTimeout(botClearTimeoutRef.current);
+//         botClearTimeoutRef.current = null;
+//       }
+      
+//       // Reset processing state for new round
+//       setProcessingRound(false);
+      
+//       // Clear bots from previous round immediately when new round starts
+//       setBotBets(prevBots => prevBots.filter(bet => bet.roundId === currentRound._id));
+//     }
+    
+//     // Update the last round ID reference
+//     lastRoundIdRef.current = currentRound._id;
+    
+//   }, [currentRound]);
+
+//   // Handle round outcome changes
+//   useEffect(() => {
+//     if (!currentRound) return;
+    
+//     // If we have a new round outcome that isn't null or "processing"
+//     if (currentRound.outcome && currentRound.outcome !== "processing") {
+//       console.log("Round outcome detected:", currentRound.outcome);
+      
+//       // Update bot bet results
+//       setBotBets((prev) => 
+//         updateBotBetResults(
+//           prev.filter((bet) => bet.roundId === currentRound._id),
+//           currentRound.outcome
+//         )
+//       );
+      
+//       // Mark the round as processing
+//       setProcessingRound(true);
+      
+//       // Clear any existing timeout
+//       if (botClearTimeoutRef.current) {
+//         clearTimeout(botClearTimeoutRef.current);
+//       }
+      
+//       // Set a new timeout to clear the bots after the display time
+//       botClearTimeoutRef.current = setTimeout(() => {
+//         console.log("Scheduled bot clearing triggered after outcome display");
+//         // Only clear if we're still on the same round
+//         setBotBets((prev) => {
+//           // If we already have a new round, don't clear
+//           if (lastRoundIdRef.current !== currentRound._id) {
+//             console.log("Round has changed, not clearing bot bets");
+//             return prev;
+//           }
+//           console.log("Clearing bot bets for completed round");
+//           return prev.filter((bet) => bet.roundId !== currentRound._id);
+//         });
+        
+//         // Reset processing state
+//         setProcessingRound(false);
+//       }, BOT_RESULTS_DISPLAY_TIME);
+//     }
+    
+//     return () => {
+//       if (botClearTimeoutRef.current) {
+//         clearTimeout(botClearTimeoutRef.current);
+//       }
+//     };
+//   }, [currentRound]);
+
+//   // Bot simulation logic for adding bets
+//   useEffect(() => {
+//     if (!ENABLE_BOTS || !currentRound) {
+//       console.log("Bots disabled or no current round");
+//       return;
+//     }
+
+//     // Only manage bot betting if the round is active and we're not in processing state
+//     if (isRoundActive(currentRound) && !processingRound) {
+//       console.log("Bot simulation effect for active round:", currentRound._id);
+
+//       // Initialize bots for a new round
+//       if (roundChangeDetectedRef.current || 
+//           !botBets.some(bet => bet.roundId === currentRound._id)) {
+//         console.log("Initializing bots for new round:", currentRound._id);
+        
+//         // Reset the round change flag
+//         roundChangeDetectedRef.current = false;
+        
+//         const initialBets = [];
+//         for (let i = 0; i < INITIAL_NUMBER_OF_BOTS; i++) {
+//           initialBets.push(generateBotBet(currentRound._id));
+//         }
+        
+//         setBotBets((prev) => {
+//           // Filter out bets from previous rounds and add new ones
+//           const filteredPrev = prev.filter((bet) => bet.roundId === currentRound._id);
+//           return [...filteredPrev, ...initialBets];
+//         });
+
+//         // Start interval for adding new bots during active round
+//         if (botIntervalRef.current) {
+//           clearInterval(botIntervalRef.current);
+//         }
+        
+//         botIntervalRef.current = setInterval(() => {
+//           if (isRoundActive(currentRound)) {
+//             console.log("Adding new bot bet if below max");
+//             setBotBets((prev) => {
+//               const currentRoundBets = prev.filter((bet) => bet.roundId === currentRound._id);
+//               if (currentRoundBets.length < MAX_BOTS_PER_ROUND) {
+//                 const newBet = generateBotBet(currentRound._id);
+//                 console.log("Adding new bot bet:", newBet);
+//                 return [...prev, newBet];
+//               }
+//               console.log("Max bots reached, no new bet added");
+//               return prev;
+//             });
+//           } else {
+//             // Stop adding bots if round is no longer active
+//             if (botIntervalRef.current) {
+//               clearInterval(botIntervalRef.current);
+//             }
+//           }
+//         }, BOT_BET_INTERVAL);
+//       }
+//     } else {
+//       // Stop the interval if round is no longer active
+//       if (botIntervalRef.current) {
+//         clearInterval(botIntervalRef.current);
+//         botIntervalRef.current = null;
+//       }
+//     }
+
+//     return () => {
+//       if (botIntervalRef.current) {
+//         clearInterval(botIntervalRef.current);
+//       }
+//     };
+//   }, [currentRound, processingRound, isRoundActive, botBets]);
+
+//   // Process bet results
+//   useEffect(() => {
+//     if (!betResults.length || !authUser || !currentRound) return;
+//     betResults.forEach((bet) => {
+//       if (bet.result) handleBetResult(bet);
+//     });
+//   }, [betResults, handleBetResult, authUser, currentRound]);
+
+//   // Timer management
+//   useEffect(() => {
+//     if (!currentRound) return;
+
+//     if (currentRound.outcome && currentRound.outcome !== "processing") {
+//       setTimeLeft(0);
+//       if (timerRef.current) clearInterval(timerRef.current);
+//       return;
+//     }
+
+//     const now = Date.now();
+//     const countdownEnd = new Date(currentRound.countdownEndTime).getTime();
+//     const endTime = new Date(currentRound.endTime).getTime();
+//     const targetTime = now < countdownEnd ? countdownEnd : endTime;
+
+//     timerRef.current = setInterval(() => {
+//       const remaining = Math.max(0, Math.floor((targetTime - Date.now()) / 1000));
+//       setTimeLeft(remaining);
+//       if (remaining <= 0) clearInterval(timerRef.current);
+//     }, 1000);
+
+//     return () => clearInterval(timerRef.current);
+//   }, [currentRound]);
+
+//   // Auto refresh when no active round
+//   useEffect(() => {
+//     if (noActiveRoundError) {
+//       autoRefreshRef.current = setInterval(() => dispatch(fetchCurrentRound()), 10000);
+//       return () => clearInterval(autoRefreshRef.current);
+//     }
+//   }, [noActiveRoundError, dispatch]);
+
+//   // Error handling
+//   useEffect(() => {
+//     if (
+//       errorMsg &&
+//       !errorMsg.toLowerCase().includes("no active round") &&
+//       errorMsg !== "null"
+//     ) {
+//       toast.error(errorMsg);
+//     }
+//   }, [errorMsg]);
+
+//   // Clear all intervals on unmount
+//   useEffect(() => {
+//     return () => {
+//       if (timerRef.current) clearInterval(timerRef.current);
+//       if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+//       if (botIntervalRef.current) clearInterval(botIntervalRef.current);
+//       if (botClearTimeoutRef.current) clearTimeout(botClearTimeoutRef.current);
+//     };
+//   }, []);
+
+//   if (!authUser) {
+//     return (
+//       <div className="flex items-center justify-center min-h-screen bg-gray-100">
+//         <div className="bg-white p-6 rounded-lg shadow-lg">
+//           <p className="text-lg text-gray-700">Please log in to play</p>
+//         </div>
+//       </div>
+//     );
+//   }
+
+//   const toastStyles = `
+//     .toast-success {
+//       background-color: #10B981;
+//       color: white;
+//       font-weight: 500;
+//     }
+//     .toast-error {
+//       background-color: #EF4444;
+//       color: white;
+//       font-weight: 500;
+//     }
+//   `;
+
+//   return (
+//     <div className="container mx-auto px-4 py-8 max-w-7xl">
+//       <style>{toastStyles}</style>
+//       <div className="flex justify-between items-center mb-8">
+//         <h1 className="text-3xl font-bold text-gray-800">Coin Flip Game</h1>
+//         <button
+//           onClick={handleRefresh}
+//           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+//         >
+//           Refresh
+//         </button>
+//       </div>
+
+//       {loading && <LoadingSpinner />}
+
+//       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+//         <div className="md:col-span-2">
+//           <RoundHistory />
+//         </div>
+//         <div className="bg-gradient-to-r from-yellow-400 via-yellow-500 to-orange-500 rounded-xl p-6 shadow-lg hover:scale-105 transition-transform duration-200">
+//           <div className="text-center">
+//             <h3 className="text-lg font-semibold text-white uppercase tracking-wide">
+//               Jackpot
+//             </h3>
+//             <p className="text-3xl font-bold text-white mt-2 drop-shadow-md">
+//               ${Number(jackpot || 0).toFixed(2)}
+//             </p>
+//             <div className="mt-3 flex justify-center gap-2">
+//               <span className="inline-block bg-white/20 px-3 py-1 rounded-full text-sm text-white">
+//                 Total Pool
+//               </span>
+//             </div>
+//           </div>
+//         </div>
+//       </div>
+
+//       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+//         <div className="lg:col-span-2 space-y-6">
+//           {noActiveRoundError ? (
+//             <NoActiveRound onRefresh={handleRefresh} isLoading={loading} />
+//           ) : (
+//             <div className="space-y-6">
+//               <div className="bg-white rounded-xl shadow-md p-6">
+//                 <div className="flex justify-between items-center mb-4">
+//                   <h2 className="text-xl font-semibold text-gray-800">
+//                     Round #{currentRound?.roundNumber || "N/A"}
+//                   </h2>
+//                   {currentRound?.outcome === null && (
+//                     <span className="text-lg font-medium text-blue-600">
+//                       {timeLeft}s Left
+//                     </span>
+//                   )}
+//                 </div>
+//                 <CoinFlip round={currentRound} />
+//                 {currentRound?.outcome === null &&
+//                   (Date.now() < new Date(currentRound.countdownEndTime).getTime() ? (
+//                     canBet ? (
+//                       <BetForm
+//                         roundId={currentRound._id}
+//                         onBetSuccess={(amount, side) => {
+//                           const msg = `Bet $${amount} on ${side}!`;
+//                           if (msg) toast.success(msg);
+//                         }}
+//                         onBetError={(err) => {
+//                           if (err) toast.error(err);
+//                         }}
+//                       />
+//                     ) : (
+//                       <p className="text-yellow-600 font-medium mt-4">
+//                         You already placed a bet for this round.
+//                       </p>
+//                     )
+//                   ) : (
+//                     <p className="text-red-500 font-medium mt-4">Betting Closed</p>
+//                   ))}
+//               </div>
+//               <GameRoomTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+//               <div className="bg-white rounded-xl shadow-md p-6">
+//                 {activeTab === "activeBet" && <ActiveBet userActiveBets={userActiveBets} />}
+//                 {activeTab === "betHistory" && <UserBets />}
+//                 {activeTab === "topWins" && <TopWinsBets />}
+//               </div>
+//             </div>
+//           )}
+//         </div>
+
+//         <div className="space-y-6">
+//           <BetUpdates headBets={currentBets.head} tailBets={currentBets.tail} />
+//         </div>
+//       </div>
+
+//       <ToastContainerWrapper />
+//     </div>
+//   );
+// };
+
+// export default React.memo(GameRoom);
+
+// import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
+// import { useDispatch, useSelector } from "react-redux";
+// import { clearError, fetchCurrentRound } from "../features/roundSlice";
+// import useAblyGameRoom from "../hooks/useAblyGameRoom";
+// import useBalanceRealtime from "../hooks/useBalanceRealtime";
+// import BetForm from "./BetForm";
+// import CoinFlip from "./CoinFlip";
+// import UserBets from "./UserBets";
+// import TopWinsBets from "./TopWinsBets";
+// import ActiveBet from "./ActiveBet";
+// import BetUpdates from "./BetUpdates";
+// import RoundHistory from "./RoundHistory";
+// import { toast as originalToast } from "react-toastify";
+// import ToastContainerWrapper from "./ToastContainerWrapper";
+// import NoActiveRound from "./NoActiveRound";
+// import LoadingSpinner from "./LoadingSpinner";
+// import GameRoomTabs from "./GameRoomTabs";
+
+// // Debounce utility
+// function debounce(func, wait) {
+//   let timeout;
+//   return (...args) => {
+//     clearTimeout(timeout);
+//     timeout = setTimeout(() => func(...args), wait);
+//   };
+// }
+
+// // Toast wrapper to log and guard against null/undefined
+// const toast = {
+//   success: (message, options) => {
+//     console.log("toast.success called:", { message, options });
+//     if (message) originalToast.success(message, options);
+//     else console.warn("Blocked null/undefined toast.success");
+//   },
+//   error: (message, options) => {
+//     console.log("toast.error called:", { message, options });
+//     if (message) originalToast.error(message, options);
+//     else console.warn("Blocked null/undefined toast.error");
+//   },
+//   info: (message, options) => {
+//     console.log("toast.info called:", { message, options });
+//     if (message) originalToast.info(message, options);
+//     else console.warn("Blocked null/undefined toast.info");
+//   },
+//   dismiss: () => originalToast.dismiss(),
+// };
+
+// export const formatResultMessage = (round) => {
+//   console.log("formatResultMessage called with:", round);
+//   if (!round?.outcome) {
+//     return { message: "Round outcome not available", type: "info" };
+//   }
+//   return {
+//     message: `Round ${round.roundNumber}: ${
+//       round.outcome.charAt(0).toUpperCase() + round.outcome.slice(1)
+//     } wins!`,
+//     type: "info",
+//   };
+// };
+
+// export const getErrorMessage = (err) => {
+//   // Return empty string for null/undefined to avoid "null" string
+//   if (!err) {
+//     console.log("getErrorMessage called with null/undefined, returned: ''");
+//     return "";
+//   }
+//   const msg =
+//     err?.message ||
+//     (typeof err === "string" ? err : JSON.stringify(err)) ||
+//     "";
+//   console.log("getErrorMessage called with:", err, "returned:", msg);
+//   return msg;
+// };
+
+// const GameRoom = () => {
+//   const dispatch = useDispatch();
+//   const { currentRound, jackpot, betResults = [], loading, error } = useSelector(
+//     (state) => state.round
+//   );
+//   const authUser = useSelector((state) => state.auth.user);
+
+//   const [timeLeft, setTimeLeft] = useState(0);
+//   const [activeTab, setActiveTab] = useState("activeBet");
+//   const timerRef = useRef(null);
+//   const autoRefreshRef = useRef(null);
+//   const processedBetsRef = useRef(new Set());
+
+//   useAblyGameRoom();
+//   useBalanceRealtime();
+
+
+//   const errorMsg = useMemo(() => getErrorMessage(error), [error]);
+//   const noActiveRoundError = useMemo(() => {
+//     const result =
+//       !loading &&
+//       (errorMsg.toLowerCase().includes("no active round") || !currentRound);
+//     console.log("noActiveRoundError:", result, { loading, errorMsg, currentRound });
+//     return result;
+//   }, [loading, currentRound, errorMsg]);
+
+//   const userActiveBets = useMemo(() => {
+//     if (!authUser || !currentRound) return [];
+//     return betResults.filter(
+//       (bet) =>
+//         bet.roundId === currentRound._id &&
+//         (bet.user === authUser._id || bet.phone === authUser.phone)
+//     );
+//   }, [betResults, currentRound, authUser]);
+
+//   const canBet = useMemo(() => {
+//     if (!authUser || !currentRound) return false;
+//     return !betResults.some(
+//       (bet) =>
+//         bet.roundId === currentRound._id &&
+//         (bet.user === authUser._id || bet.phone === authUser.phone) &&
+//         !bet.result
+//     );
+//   }, [betResults, authUser, currentRound]);
+
+//   const currentBets = useMemo(
+//     () => ({
+//       head: betResults.filter(
+//         (bet) => bet.side === "heads" && bet.roundId === currentRound?._id
+//       ),
+//       tail: betResults.filter(
+//         (bet) => bet.side === "tails" && bet.roundId === currentRound?._id
+//       ),
+//     }),
+//     [betResults, currentRound]
+//   );
+
+//   const handleBetResult = useCallback(
+//     (bet) => {
+//       console.log("handleBetResult called with:", bet);
+//       const betKey = `${bet.betId || bet._id}_${bet.result}`;
+//       if (
+//         !authUser ||
+//         !currentRound ||
+//         !bet.result ||
+//         processedBetsRef.current.has(betKey)
+//       ) {
+//         console.log("handleBetResult skipped:", { betKey, authUser, currentRound });
+//         return;
+//       }
+
+//       const isUserBet = bet.user === authUser._id || bet.phone === authUser.phone;
+//       if (!isUserBet || bet.gameRound !== currentRound._id) return;
+
+//       processedBetsRef.current.add(betKey);
+//       const amount =
+//         bet.result === "win"
+//           ? bet.winAmount || bet.betAmount
+//           : bet.lossAmount || bet.betAmount;
+//       const message =
+//         bet.result === "win"
+//           ? `🎉 Round #${currentRound.roundNumber}: You won $${Number(amount).toFixed(2)}!`
+//           : `💫 Round #${currentRound.roundNumber}: You lost $${Number(amount).toFixed(2)}`;
+
+//       if (message) {
+//         toast[bet.result === "win" ? "success" : "error"](message, {
+//           position: "top-center",
+//           autoClose: 5000,
+//           hideProgressBar: false,
+//           closeOnClick: true,
+//           pauseOnHover: true,
+//           draggable: true,
+//           className: `toast-${bet.result}`,
+//           toastId: betKey,
+//         });
+//       } else {
+//         console.warn("No message generated for bet result:", bet);
+//       }
+//     },
+//     [authUser, currentRound]
+//   );
+
+//   const handleRefresh = useCallback(
+//     debounce(async () => {
+//       console.log("handleRefresh triggered");
+//       toast.dismiss();
+//       try {
+//         await dispatch(fetchCurrentRound()).unwrap();
+//         toast.success("Game refreshed");
+//       } catch (err) {
+//         toast.error("Refresh failed");
+//       }
+//     }, 500),
+//     [dispatch]
+//   );
+
+//   useEffect(() => {
+//     console.log("betResults useEffect:", { betResults, authUser, currentRound });
+//     if (!betResults.length || !authUser || !currentRound) return;
+
+//     betResults.forEach((bet) => {
+//       if (bet.result) handleBetResult(bet);
+//     });
+//   }, [betResults, handleBetResult, authUser, currentRound]);
+
+//   useEffect(() => {
+//     console.log("currentRound useEffect:", currentRound);
+//     if (!currentRound) return;
+
+//     if (currentRound.outcome && currentRound.outcome !== "processing") {
+//       setTimeLeft(0);
+//       if (timerRef.current) clearInterval(timerRef.current);
+//       return;
+//     }
+
+//     const now = Date.now();
+//     const countdownEnd = new Date(currentRound.countdownEndTime).getTime();
+//     const endTime = new Date(currentRound.endTime).getTime();
+//     const targetTime = now < countdownEnd ? countdownEnd : endTime;
+
+//     timerRef.current = setInterval(() => {
+//       const remaining = Math.max(0, Math.floor((targetTime - Date.now()) / 1000));
+//       setTimeLeft(remaining);
+//       if (remaining <= 0) clearInterval(timerRef.current);
+//     }, 1000);
+
+//     return () => clearInterval(timerRef.current);
+//   }, [currentRound]);
+
+//   useEffect(() => {
+//     console.log("noActiveRoundError useEffect:", noActiveRoundError);
+//     if (noActiveRoundError) {
+//       autoRefreshRef.current = setInterval(() => dispatch(fetchCurrentRound()), 10000);
+//       return () => clearInterval(autoRefreshRef.current);
+//     }
+//   }, [noActiveRoundError, dispatch]);
+
+//   useEffect(() => {
+//     console.log("errorMsg useEffect:", errorMsg);
+//     // Only show toast for meaningful errors
+//     if (
+//       errorMsg &&
+//       !errorMsg.toLowerCase().includes("no active round") &&
+//       errorMsg !== "null" // Explicitly block "null" string
+//     ) {
+//       toast.error(errorMsg);
+//     }
+//   }, [errorMsg]);
+
+//   useEffect(() => {
+//     console.log("Component mounted or updated:", { loading, currentRound, betResults });
+//   }, [loading, currentRound, betResults]);
+
+//   if (!authUser) {
+//     return (
+//       <div className="flex items-center justify-center min-h-screen bg-gray-100">
+//         <div className="bg-white p-6 rounded-lg shadow-lg">
+//           <p className="text-lg text-gray-700">Please log in to play</p>
+//         </div>
+//       </div>
+//     );
+//   }
+
+//   const toastStyles = `
+//     .toast-success {
+//       background-color: #10B981;
+//       color: white;
+//       font-weight: 500;
+//     }
+//     .toast-error {
+//       background-color: #EF4444;
+//       color: white;
+//       font-weight: 500;
+//     }
+//   `;
+
+//   return (
+//     <div className="container mx-auto px-4 py-8 max-w-7xl">
+//       <style>{toastStyles}</style>
+//       <div className="flex justify-between items-center mb-8">
+//         <h1 className="text-3xl font-bold text-gray-800">Coin Flip Game</h1>
+//         <button
+//           onClick={handleRefresh}
+//           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+//         >
+//           Refresh
+//         </button>
+//       </div>
+
+//       {loading && <LoadingSpinner />}
+
+//       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+//         <div className="md:col-span-2">
+//           <RoundHistory />
+//         </div>
+//         <div className="bg-gradient-to-r from-yellow-400 via-yellow-500 to-orange-500 rounded-xl p-6 shadow-lg hover:scale-105 transition-transform duration-200">
+//           <div className="text-center">
+//             <h3 className="text-lg font-semibold text-white uppercase tracking-wide">
+//               Jackpot
+//             </h3>
+//             <p className="text-3xl font-bold text-white mt-2 drop-shadow-md">
+//               ${Number(jackpot || 0).toFixed(2)}
+//             </p>
+//             <div className="mt-3 flex justify-center gap-2">
+//               <span className="inline-block bg-white/20 px-3 py-1 rounded-full text-sm text-white">
+//                 Total Pool
+//               </span>
+//             </div>
+//           </div>
+//         </div>
+//       </div>
+
+//       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+//         <div className="lg:col-span-2 space-y-6">
+//           {noActiveRoundError ? (
+//             <NoActiveRound onRefresh={handleRefresh} isLoading={loading} />
+//           ) : (
+//             <div className="space-y-6">
+//               <div className="bg-white rounded-xl shadow-md p-6">
+//                 <div className="flex justify-between items-center mb-4">
+//                   <h2 className="text-xl font-semibold text-gray-800">
+//                     Round #{currentRound?.roundNumber || "N/A"}
+//                   </h2>
+//                   {currentRound?.outcome === null && (
+//                     <span className="text-lg font-medium text-blue-600">
+//                       {timeLeft}s Left
+//                     </span>
+//                   )}
+//                 </div>
+//                 <CoinFlip round={currentRound} />
+//                 {currentRound?.outcome === null &&
+//                   (Date.now() < new Date(currentRound.countdownEndTime).getTime() ? (
+//                     canBet ? (
+//                       <BetForm
+//                         roundId={currentRound._id}
+//                         onBetSuccess={(amount, side) => {
+//                           const msg = `Bet $${amount} on ${side}!`;
+//                           if (msg) toast.success(msg);
+//                         }}
+//                         onBetError={(err) => {
+//                           if (err) toast.error(err);
+//                         }}
+//                       />
+//                     ) : (
+//                       <p className="text-yellow-600 font-medium mt-4">
+//                         You already placed a bet for this round.
+//                       </p>
+//                     )
+//                   ) : (
+//                     <p className="text-red-500 font-medium mt-4">Betting Closed</p>
+//                   ))}
+//               </div>
+//               <GameRoomTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+//               <div className="bg-white rounded-xl shadow-md p-6">
+//                 {activeTab === "activeBet" && <ActiveBet userActiveBets={userActiveBets} />}
+//                 {activeTab === "betHistory" && <UserBets />}
+//                 {activeTab === "topWins" && <TopWinsBets />}
+//               </div>
+//             </div>
+//           )}
+//         </div>
+
+//         <div className="space-y-6">
+//           <BetUpdates headBets={currentBets.head} tailBets={currentBets.tail} />
+//         </div>
+//       </div>
+
+//       <ToastContainerWrapper />
+//     </div>
+//   );
+// };
+
+// export default React.memo(GameRoom);
+
 // import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 // import { useDispatch, useSelector } from "react-redux";
 // import { clearError, fetchCurrentRound } from "../features/roundSlice";
