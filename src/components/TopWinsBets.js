@@ -1,4 +1,6 @@
-// // // src/components/TopWinsBets.js
+
+
+
 import React, { useEffect, useState, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchTopWins } from "../features/roundSlice";
@@ -42,10 +44,10 @@ const TopWinsBets = () => {
   // Filter button component for reusability
   const FilterButton = ({ type, currentFilter, onClick }) => (
     <button
-      className={`px-4 py-2 rounded-lg transition-colors duration-200 ${
+      className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
         currentFilter === type
-          ? "bg-gradient-to-r from-blue-500 to-blue-700 text-white"
-          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+          ? "bg-[#00ff88] text-gray-900 shadow-[0_0_15px_#00ff8860]"
+          : "bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-[#00ff88] border border-gray-700"
       }`}
       onClick={() => onClick(type)}
     >
@@ -54,44 +56,74 @@ const TopWinsBets = () => {
   );
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 my-6 max-w-2xl mx-auto">
-      <h3 className="text-2xl font-semibold mb-6 text-center text-gray-800">
-        Top 10 Wins ({filter.charAt(0).toUpperCase() + filter.slice(1)})
+    <div className="bg-gray-900 text-white rounded-xl shadow-lg p-6 my-6 max-w-2xl mx-auto border border-gray-800">
+      <h3 className="text-2xl font-semibold mb-6 text-center text-[#00ff88]">
+        <span className="inline-block border-b-2 border-[#00ff88] pb-1">
+          Top 10 Wins ({filter.charAt(0).toUpperCase() + filter.slice(1)})
+        </span>
       </h3>
 
-      <div className="flex justify-center gap-4 mb-6">
+      <div className="flex justify-center gap-3 mb-6">
         <FilterButton type="daily" currentFilter={filter} onClick={handleFilterChange} />
         <FilterButton type="weekly" currentFilter={filter} onClick={handleFilterChange} />
         <FilterButton type="monthly" currentFilter={filter} onClick={handleFilterChange} />
       </div>
 
       {loading ? (
-        <p className="text-center text-gray-500 animate-pulse">Loading...</p>
+        <div className="text-center py-10">
+          <svg className="animate-spin h-10 w-10 mx-auto mb-4 text-[#00ff88]" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8h8a8 8 0 01-8 8v-8H4z" />
+          </svg>
+          <p className="text-gray-400">Loading top winners...</p>
+        </div>
       ) : error ? (
-        <p className="text-center text-red-600 font-medium">Error: {error}</p>
+        <p className="text-center text-red-400 font-medium py-10">Error: {error}</p>
       ) : topWins.length === 0 ? (
-        <p className="text-center text-gray-500">No wins available.</p>
+        <div className="text-center py-10 text-gray-400">
+          <p className="mb-2">No wins available for this time period.</p>
+          <p className="text-sm">Check back later or try a different filter.</p>
+        </div>
       ) : (
         <ul className="space-y-4">
           {topWins.map((bet, idx) => (
             <li
               key={bet._id || idx}
-              className="border border-gray-200 p-4 rounded-lg hover:bg-gray-50 transition-colors duration-150"
+              className={`border ${idx < 3 ? 'border-[#00ff8860]' : 'border-gray-700'} bg-gray-800 p-4 rounded-lg hover:bg-gray-750 transition-all duration-200 ${
+                idx === 0 ? 'shadow-[0_0_15px_#00ff8840]' : ''
+              }`}
             >
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-bold text-blue-600">Rank #{idx + 1}</span>
-                <span className="text-xs text-gray-400">{formatDate(bet.createdAt)}</span>
+              <div className="flex justify-between items-center mb-3">
+                <div className="flex items-center">
+                  <div className={`w-8 h-8 flex items-center justify-center rounded-full mr-3 ${
+                    idx === 0 ? 'bg-[#00ff88] text-gray-900' : 
+                    idx === 1 ? 'bg-[#29babd] text-gray-900' : 
+                    idx === 2 ? 'bg-[#1b3a3d] text-[#00ff88]' : 
+                    'bg-gray-700 text-gray-300'
+                  } font-bold`}>
+                    {idx + 1}
+                  </div>
+                  <span className={`font-bold ${
+                    idx === 0 ? 'text-[#00ff88]' : 
+                    idx === 1 ? 'text-[#29babd]' : 
+                    idx === 2 ? 'text-[#00ff88]' : 
+                    'text-white'
+                  }`}>
+                    {bet.user?.name ||
+                      (bet.user?.phone && maskPhoneNumber(bet.user.phone)) ||
+                      "Anonymous"}
+                  </span>
+                </div>
+                <span className="text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded-full">
+                  {formatDate(bet.createdAt)}
+                </span>
               </div>
-              <p className="text-sm">
-                <span className="font-medium">User:</span>{" "}
-                {bet.user?.name ||
-                  (bet.user?.phone && maskPhoneNumber(bet.user.phone)) ||
-                  "Unknown"}
-              </p>
-              <p className="text-sm">
-                <span className="font-medium">Won:</span>{" "}
-                <span className="text-green-600 font-semibold">Ksh {bet.amountWon.toLocaleString()}</span>
-              </p>
+              <div className="flex justify-between items-center mt-2 pl-11">
+                <span className="text-gray-400 text-sm">Won:</span>
+                <span className={`text-[#00ff88] font-semibold ${idx === 0 ? 'text-lg' : ''}`}>
+                  Ksh {bet.amountWon.toLocaleString()}
+                </span>
+              </div>
             </li>
           ))}
         </ul>
@@ -101,6 +133,117 @@ const TopWinsBets = () => {
 };
 
 export default TopWinsBets;
+
+
+
+
+
+///****************************************************************************************************************** */
+
+
+// // // src/components/TopWinsBets.js
+// import React, { useEffect, useState, useCallback } from "react";
+// import { useDispatch, useSelector } from "react-redux";
+// import { fetchTopWins } from "../features/roundSlice";
+
+// // Helper function to mask a phone number: show the first 2 digits and the last 3 digits.
+// const maskPhoneNumber = (phone) => {
+//   if (!phone) return "Unknown";
+//   // If the phone number is too short to mask (i.e. less than or equal to 5 digits), return it as is.
+//   if (phone.length <= 5) return phone;
+  
+//   const firstTwo = phone.slice(0, 2);
+//   const lastThree = phone.slice(-3);
+//   // Replace the digits between with asterisks.
+//   const maskedMiddle = phone.slice(2, phone.length - 3).replace(/./g, "*");
+//   return firstTwo + maskedMiddle + lastThree;
+// };
+
+// const TopWinsBets = () => {
+//   const dispatch = useDispatch();
+//   const { topWins = [], loading, error } = useSelector((state) => state.round);
+//   const [filter, setFilter] = useState("daily");
+
+//   // Memoize filter change handler
+//   const handleFilterChange = useCallback((newFilter) => {
+//     setFilter(newFilter);
+//   }, []);
+
+//   // Fetch data only when filter changes
+//   useEffect(() => {
+//     dispatch(fetchTopWins(filter));
+//   }, [dispatch, filter]);
+
+//   // Memoized date formatter
+//   const formatDate = useCallback((dateStr) => {
+//     return new Date(dateStr).toLocaleString("en-US", {
+//       dateStyle: "medium",
+//       timeStyle: "short",
+//     });
+//   }, []);
+
+//   // Filter button component for reusability
+//   const FilterButton = ({ type, currentFilter, onClick }) => (
+//     <button
+//       className={`px-4 py-2 rounded-lg transition-colors duration-200 ${
+//         currentFilter === type
+//           ? "bg-gradient-to-r from-blue-500 to-blue-700 text-white"
+//           : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+//       }`}
+//       onClick={() => onClick(type)}
+//     >
+//       {type.charAt(0).toUpperCase() + type.slice(1)}
+//     </button>
+//   );
+
+//   return (
+//     <div className="bg-white rounded-xl shadow-lg p-6 my-6 max-w-2xl mx-auto">
+//       <h3 className="text-2xl font-semibold mb-6 text-center text-gray-800">
+//         Top 10 Wins ({filter.charAt(0).toUpperCase() + filter.slice(1)})
+//       </h3>
+
+//       <div className="flex justify-center gap-4 mb-6">
+//         <FilterButton type="daily" currentFilter={filter} onClick={handleFilterChange} />
+//         <FilterButton type="weekly" currentFilter={filter} onClick={handleFilterChange} />
+//         <FilterButton type="monthly" currentFilter={filter} onClick={handleFilterChange} />
+//       </div>
+
+//       {loading ? (
+//         <p className="text-center text-gray-500 animate-pulse">Loading...</p>
+//       ) : error ? (
+//         <p className="text-center text-red-600 font-medium">Error: {error}</p>
+//       ) : topWins.length === 0 ? (
+//         <p className="text-center text-gray-500">No wins available.</p>
+//       ) : (
+//         <ul className="space-y-4">
+//           {topWins.map((bet, idx) => (
+//             <li
+//               key={bet._id || idx}
+//               className="border border-gray-200 p-4 rounded-lg hover:bg-gray-50 transition-colors duration-150"
+//             >
+//               <div className="flex justify-between items-center mb-2">
+//                 <span className="font-bold text-blue-600">Rank #{idx + 1}</span>
+//                 <span className="text-xs text-gray-400">{formatDate(bet.createdAt)}</span>
+//               </div>
+//               <p className="text-sm">
+//                 <span className="font-medium">User:</span>{" "}
+//                 {bet.user?.name ||
+//                   (bet.user?.phone && maskPhoneNumber(bet.user.phone)) ||
+//                   "Unknown"}
+//               </p>
+//               <p className="text-sm">
+//                 <span className="font-medium">Won:</span>{" "}
+//                 <span className="text-green-600 font-semibold">Ksh {bet.amountWon.toLocaleString()}</span>
+//               </p>
+//             </li>
+//           ))}
+//         </ul>
+//       )}
+//     </div>
+//   );
+// };
+
+// export default TopWinsBets;
 
 
 // import React, { useEffect, useState, useCallback } from "react";

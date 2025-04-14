@@ -23,7 +23,7 @@ const Leaderboard = () => {
   if (loading) return <div>Loading leaderboard...</div>;
 
   return (
-    <div className="p-4 bg-white rounded shadow">
+    <div className="p-4  rounded shadow">
       <h2 className="text-xl font-bold mb-4">Leaderboard</h2>
       <ul className="list-disc ml-6">
         {rounds.map((round) => (
