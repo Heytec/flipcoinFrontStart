@@ -733,6 +733,7 @@ const GameRoom = () => {
         }`}
       >
         Top Wins
+        
       </button>
     </div>
     <div className="p-2">
@@ -742,6 +743,8 @@ const GameRoom = () => {
       {activeTab === "betHistory" && <UserBets />}
       {activeTab === "topWins" && <TopWinsBets />}
     </div>
+
+
   </div>
 ) : (
   <div className="bg-[#09101f] rounded-xl shadow-md overflow-hidden p-4">
