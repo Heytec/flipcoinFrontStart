@@ -125,13 +125,13 @@ function Jackpot() {
         } p-1 md:p-6 shadow-lg transition-all duration-200 overflow-hidden`}
         animate={{
           scale: showAnimation ? [1, 1.1, 1.05] : 1,
-          height: showAnimation ? ["auto", "auto", "auto"] : "auto",
+          height: showAnimation ? ["30px", "30px", "30px"] : "auto",
           boxShadow: showAnimation
             ? "0px 0px 20px rgba(255, 215, 0, 0.8)"
             : "0px 0px 0px rgba(255, 215, 0, 0)",
         }}
         transition={{
-          duration: 0.8,
+          duration: 3,
           ease: [0.64, 0.57, 0.67, 1],
         }}
         whileHover={{ scale: isScrolled ? 1 : 1.05 }}>

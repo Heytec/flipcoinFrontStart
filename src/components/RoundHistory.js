@@ -85,7 +85,7 @@ const RoundHistory = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const isMobile = useIsMobile(); // 👈 detect mobile
-  const displayCount = isMobile ? 6 : 20;
+  const displayCount = isMobile ? 7: 20;
 
   const validHistory = useMemo(
     () => history.filter((round) => ["heads", "tails", "house"].includes(round.outcome)),
@@ -178,7 +178,7 @@ const RoundHistory = () => {
           ) : (
             <div>
               <div classNa me=" overflow-hidden md:overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-                <div className={`flex flex-row  justify-start gap-1 ${isExpanded&& "flex-wrap gap-3"}`}>
+                <div className={`flex flex-row  pl-0.5 justify-start gap-1 ${isExpanded&& "flex-wrap gap-3"}`}>
                   {displayedRounds.map((round) => (
                     <RoundItem key={round._id} round={round} />
                   ))}

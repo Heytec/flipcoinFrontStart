@@ -1,4 +1,7 @@
 
+// //////******************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************* */
+
+
 import React, {  useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 
@@ -28,7 +31,7 @@ const BetItem = React.memo(({ bet, index, animationDelay, isWinner }) => {
     return () => {
       window.removeEventListener("resize", checkMobile);
     };
-  }, []);
+  }, [animationDelay]);
 
   // Control sequential appearance
   useEffect(() => {
@@ -74,6 +77,9 @@ const BetSection = React.memo(
     const containerRef = useRef(null);
     const [isMobile, setIsMobile] = useState(false);
     const [visibleBets, setVisibleBets] = useState([]);
+    // Add state for desktop view limit
+    const [showAllBets, setShowAllBets] = useState(false);
+    const DESKTOP_BET_LIMIT = 10;
 
     // Check screen size
     useEffect(() => {
@@ -108,6 +114,11 @@ const BetSection = React.memo(
 
     // Define the label text (Heads/Tails)
     const sideLabel = side === "heads" ? "Heads" : "Tails";
+
+    // Get the bets to display based on limit for desktop view
+    const displayBets = !isMobile && !showAllBets && bets.length > DESKTOP_BET_LIMIT
+      ? bets.slice(0, DESKTOP_BET_LIMIT)
+      : bets;
 
     return (
       <div
@@ -206,7 +217,7 @@ const BetSection = React.memo(
 
             {/* Desktop view content - user list like in Image 3 */}
             <div className="hidden md:block">
-              {bets.map((bet, index) => (
+              {displayBets.map((bet, index) => (
                 <div
                   key={bet.betId || `${bet.side}-${index}`}
                   className="flex justify-between items-center p-2 bg-gray-800 rounded-md my-1 mx-2">
@@ -227,6 +238,18 @@ const BetSection = React.memo(
                   </div>
                 </div>
               ))}
+              
+              {/* Show more/less button in desktop view */}
+              {/* {!isMobile && bets.length > DESKTOP_BET_LIMIT && (
+                <div className="text-center mt-2 mb-2">
+                  <button
+                    onClick={() => setShowAllBets(!showAllBets)}
+                    className="text-blue-400 text-sm hover:text-blue-300 transition-colors px-3 py-1 rounded-md bg-gray-800"
+                  >
+                    {showAllBets ? `Show Less` : `Show ${bets.length - DESKTOP_BET_LIMIT} More`}
+                  </button>
+                </div>
+              )} */}
             </div>
           </div>
         ) : (
@@ -338,10 +361,352 @@ const BetUpdates = React.memo(
   }
 );
 
-// Example usage with sample data that matches Image 3
-
-
 export default BetUpdates;
+// //////******************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************* */
+
+// import React, {  useState, useEffect, useRef } from "react";
+// import { motion } from "framer-motion";
+
+// // Constant for currency symbol
+// const CURRENCY_SYMBOL = "Ksh ";
+
+// // Utility to mask phone number
+// const maskPhoneNumber = (phone) => {
+//   if (!phone) return "N/A";
+//   const strPhone = String(phone);
+//   return `${strPhone.slice(0, 3)}-${strPhone.slice(3, 6)}-****`;
+// };
+
+// const BetItem = React.memo(({ bet, index, animationDelay, isWinner }) => {
+//   const [isVisible, setIsVisible] = useState(false);
+//   const [isMobile, setIsMobile] = useState(false);
+
+//   // Check if we're on mobile
+//   useEffect(() => {
+//     const checkMobile = () => {
+//       setIsMobile(window.innerWidth < 768); // md breakpoint is 768px
+//     };
+
+//     checkMobile();
+//     window.addEventListener("resize", checkMobile);
+
+//     return () => {
+//       window.removeEventListener("resize", checkMobile);
+//     };
+//   }, []);
+
+//   // Control sequential appearance
+//   useEffect(() => {
+//     const appearTimer = setTimeout(() => {
+//       setIsVisible(true);
+//     }, animationDelay);
+
+//     return () => {
+//       clearTimeout(appearTimer);
+//     };
+//   }, [animationDelay]);
+
+//   if (!isVisible) return null;
+
+//   // Regular bet display (as in Image 1)
+//   if (!isWinner) {
+//     return (
+//       <motion.div
+//         initial={{ opacity: 0, scale: 0.8 }}
+//         animate={{ opacity: 1, scale: 1 }}
+//         transition={{
+//           duration: 0.4,
+//           type: "spring",
+//           stiffness: 100,
+//         }}
+//         className="flex flex-col items-center justify-center">
+//         <motion.div className="flex flex-col items-center justify-center text-center bg-gray-800 rounded-full p-2 w-10 h-10 border border-gray-700">
+//           <div className="font-medium text-xs text-green-400">
+//             {CURRENCY_SYMBOL}
+//             {Number(bet.betAmount).toFixed(0)}
+//           </div>
+//         </motion.div>
+//       </motion.div>
+//     );
+//   }
+
+//   // Winner display (as in Image 2)
+//   return null; // Not used in single bet items when showing winners
+// });
+
+// const BetSection = React.memo(
+//   ({ title, bets, isWinnerSide, winningSide, playerCount, side }) => {
+//     const containerRef = useRef(null);
+//     const [isMobile, setIsMobile] = useState(false);
+//     const [visibleBets, setVisibleBets] = useState([]);
+
+//     // Check screen size
+//     useEffect(() => {
+//       const checkMobile = () => {
+//         setIsMobile(window.innerWidth < 768); // md breakpoint
+//       };
+
+//       checkMobile();
+//       window.addEventListener("resize", checkMobile);
+
+//       return () => {
+//         window.removeEventListener("resize", checkMobile);
+//       };
+//     }, []);
+
+//     // Update visible bets - show all available bets in mobile view
+//     useEffect(() => {
+//       if (bets.length > 0) {
+//         setVisibleBets(bets);
+//       } else {
+//         setVisibleBets([]);
+//       }
+//     }, [bets]);
+
+//     // Determine if this section is showing the winning side
+//     const showWinner = isWinnerSide && winningSide;
+
+//     // Define colors based on side (for desktop view)
+//     const sideColor = side === "heads" ? "red-500" : "green-500";
+//     const bgColor = side === "heads" ? "red-500/10" : "green-500/10";
+//     const borderColor = side === "heads" ? "red-500/20" : "green-500/20";
+
+//     // Define the label text (Heads/Tails)
+//     const sideLabel = side === "heads" ? "Heads" : "Tails";
+
+//     return (
+//       <div
+//         className={`rounded-lg shadow-md p-3 flex-1 ${
+//           showWinner ? "bg-gray-800" : ""
+//         } 
+//       md:p-0 md:rounded-none md:shadow-none ${isMobile ? "" : ""}`}>
+//         {/* Mobile view header */}
+//         <div className="flex items-center justify-between mb-2 md:hidden">
+//           <h4 className="text-base font-semibold text-white">
+//             {playerCount} {playerCount === 1 ? "Player" : "Players"}
+//           </h4>
+//         </div>
+
+//         {/* Desktop view header */}
+//         <div className={`hidden md:flex md:flex-col md:h-full`}>
+//           {/* Top section with icon and label */}
+//           <div className="hidden md:flex md:flex-col md:items-center md:justify-center md:p-2">
+//             <div
+//               className={`flex items-center justify-center rounded-full w-12 h-12 ${
+//                 side === "heads" ? "bg-green-500" : "bg-blue-500"
+//               } mb-2`}>
+//               <span className="text-white text-xl font-bold">
+//                 {side === "heads" ? "H" : "T"}
+//               </span>
+//             </div>
+//             <span
+//               className={`font-medium ${
+//                 side === "heads" ? "text-green-500" : "text-blue-500"
+//               }`}>
+//               {sideLabel}
+//             </span>
+//           </div>
+
+//           {/* Player count and amount section */}
+//           <div
+//             className={`hidden md:block md:w-full md:py-2 md:px-3 bg-${bgColor} border-b border-${borderColor}`}>
+//             <div className="flex justify-between items-center">
+//               <span className="text-white">Players {playerCount}</span>
+//               <span className="text-white">
+//                 {CURRENCY_SYMBOL}
+//                 {bets
+//                   .reduce((sum, bet) => sum + Number(bet.betAmount), 0)
+//                   .toFixed(0)}
+//               </span>
+//             </div>
+//           </div>
+
+//           {/* Header labels section */}
+//           {/* <div className="hidden md:flex md:justify-between md:items-center md:p-2 md:border-b md:border-gray-700">
+//             <span className="text-white">Players</span>
+//             <span className="text-white">Bet</span>
+//           </div> */}
+//         </div>
+
+//         {bets.length > 0 ? (
+//           <div
+//             ref={containerRef}
+//             className="w-full">
+//             {/* Mobile view content */}
+//             <div className="md:hidden">
+//               {showWinner ? (
+//                 // Winner display (as in Image 2)
+//                 <motion.div
+//                   initial={{ opacity: 0, scale: 0.95 }}
+//                   animate={{ opacity: 1, scale: 1 }}
+//                   transition={{
+//                     duration: 0.6,
+//                     type: "spring",
+//                     stiffness: 100,
+//                   }}
+//                   className="w-full bg-gray-800 rounded-lg p-3 border border-gray-700 text-center">
+//                   <div className="font-bold text-sm text-green-400 mb-1">
+//                     {playerCount} {playerCount === 1 ? "WINNER" : "WINNERS"}
+//                   </div>
+//                   <div className="font-medium text-lg text-green-400">
+//                     {CURRENCY_SYMBOL}
+//                     {bets[0]?.winAmount || bets[0]?.betAmount || "0"}
+//                   </div>
+//                 </motion.div>
+//               ) : (
+              
+//                 <div className="flex items-center justify-start gap-2 overflow-hidden flex-nowrap">
+//                   {visibleBets.map((bet, index) => (
+//                     <BetItem
+//                       key={bet.betId || `${bet.side}-${index}`}
+//                       bet={bet}
+//                       index={index}
+//                       isWinner={false}
+//                       animationDelay={index * 100}
+//                     />
+//                   ))}
+//                 </div>
+//               )}
+//             </div>
+
+//             {/* Desktop view content - user list like in Image 3 */}
+//             <div className="hidden md:block">
+//               {bets.map((bet, index) => (
+//                 <div
+//                   key={bet.betId || `${bet.side}-${index}`}
+//                   className="flex justify-between items-center p-2 bg-gray-800 rounded-md my-1 mx-2">
+//                   <div className="flex items-center gap-2">
+//                     <div className="text-green-400 font-medium">
+//                       #{index + 1}
+//                     </div>
+//                     <div className="text-gray-400">
+//                       {bet.user
+//                         ? maskPhoneNumber(bet.user)
+//                         : maskPhoneNumber(
+//                             "254" + Math.floor(Math.random() * 900000 + 100000)
+//                           )}
+//                     </div>
+//                   </div>
+//                   <div className="text-green-400 font-medium">
+//                     Ksh {Number(bet.betAmount).toFixed(0)}
+//                   </div>
+//                 </div>
+//               ))}
+//             </div>
+//           </div>
+//         ) : (
+//           <div className="flex items-center justify-center p-3">
+//             <p className="text-xs text-gray-400 text-center">0 Players</p>
+//           </div>
+//         )}
+//       </div>
+//     );
+//   }
+// );
+
+// // Main BetUpdates component
+// const BetUpdates = React.memo(
+//   ({
+//     headBets = [],
+//     tailBets = [],
+//     currentRound = {},
+//     isResultsIn = false,
+//     winningSide = null,
+//   }) => {
+//     const [isMobile, setIsMobile] = useState(false);
+//     const noBets = headBets.length === 0 && tailBets.length === 0;
+
+//     // Check if we're on mobile
+//     useEffect(() => {
+//       const checkMobile = () => {
+//         setIsMobile(window.innerWidth < 768); // md breakpoint is 768px
+//       };
+
+//       checkMobile();
+//       window.addEventListener("resize", checkMobile);
+
+//       return () => {
+//         window.removeEventListener("resize", checkMobile);
+//       };
+//     }, []);
+
+//     return (
+//       <section className="h-auto w-full shadow-xl rounded-xl  ">
+//         {noBets ? (
+//           <p className="text-sm text-gray-400 text-center py-3 bg-gray-900 rounded-lg border border-gray-800 shadow-md">
+//             No bets have been placed yet
+//           </p>
+//         ) : (
+//           <div
+//             className={`w-full grid grid-cols-1 gap-2 md:gap-0 ${
+//               isMobile ? "" : ""
+//             }`}>
+//             {/* The bet sections */}
+//             <div className="grid grid-cols-2  md:grid-cols-2 gap-2">
+//               <div className=" border-r-2 border-green-600 md:border-r md:border-gray-700">
+//                 <BetSection
+//                   title="Heads Bets"
+//                   bets={headBets}
+//                   isWinnerSide={isResultsIn}
+//                   winningSide={winningSide === "heads"}
+//                   playerCount={headBets.length}
+//                   side="heads"
+//                 />
+//               </div>
+//               <div>
+//                 <BetSection
+//                   title="Tails Bets"
+//                   bets={tailBets}
+//                   isWinnerSide={isResultsIn}
+//                   winningSide={winningSide === "tails"}
+//                   playerCount={tailBets.length}
+//                   side="tails"
+//                 />
+//               </div>
+//             </div>
+//           </div>
+//         )}
+//       </section>
+//     );
+//   },
+//   (prevProps, nextProps) => {
+//     // Custom comparison function for React.memo
+//     // Return true if the component should NOT re-render
+
+//     // Check if result state has changed
+//     if (
+//       prevProps.isResultsIn !== nextProps.isResultsIn ||
+//       prevProps.winningSide !== nextProps.winningSide
+//     ) {
+//       return false; // Re-render if results state changed
+//     }
+
+//     // Check if currentRound has changed
+//     if (prevProps.currentRound?.id !== nextProps.currentRound?.id) {
+//       return false; // Re-render if round ID changed
+//     }
+
+//     // Check if the bets arrays have changed
+//     const headBetsChanged =
+//       prevProps.headBets.length !== nextProps.headBets.length ||
+//       JSON.stringify(prevProps.headBets) !== JSON.stringify(nextProps.headBets);
+
+//     const tailBetsChanged =
+//       prevProps.tailBets.length !== nextProps.tailBets.length ||
+//       JSON.stringify(prevProps.tailBets) !== JSON.stringify(nextProps.tailBets);
+
+//     if (headBetsChanged || tailBetsChanged) {
+//       return false; // Re-render if bets changed
+//     }
+
+//     return true; // Don't re-render otherwise
+//   }
+// );
+
+// // Example usage with sample data that matches Image 3
+
+
+// export default BetUpdates;
 
 // //////******************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************* */
 // import React, { useMemo, useState, useEffect, useRef } from "react";

@@ -199,53 +199,78 @@ const GameRoom = () => {
       //     toastId: betKey,
       //   });
       // }
-      const isUserBet = bet.user === authUser._id || bet.phone === authUser.phone;
-if (!isUserBet || bet.gameRound !== currentRound._id) return;
+      const isUserBet =
+        bet.user === authUser._id || bet.phone === authUser.phone;
+      if (!isUserBet || bet.gameRound !== currentRound._id) return;
 
-processedBetsRef.current.add(betKey);
-const amount = bet.result === "win" 
-  ? bet.winAmount || bet.betAmount 
-  : bet.lossAmount || bet.betAmount;
+      processedBetsRef.current.add(betKey);
+      const amount =
+        bet.result === "win"
+          ? bet.winAmount || bet.betAmount
+          : bet.lossAmount || bet.betAmount;
 
-// Format currency with commas for better readability
-const formattedAmount = Number(amount).toLocaleString(undefined, {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2
-});
+      // Format currency with commas for better readability
+      const formattedAmount = Number(amount).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
 
-// Create themed message with icon and styled content
-const isWin = bet.result === "win";
-const messageIcon = isWin ? "🎉" : "💫";
-const message = `
+      // Create themed message with icon and styled content
+      const isWin = bet.result === "win";
+      const messageIcon = isWin ? "🎉" : "💫";
+      const message = `
   <div class="flex items-center gap-2">
     <span class="text-xl">${messageIcon}</span>
     <div>
-      <span class="font-bold">Round #${currentRound.roundNumber}</span>: You ${isWin ? 'won' : 'lost'} 
-      <span class="${isWin ? 'text-[#00ff88] font-bold' : 'text-red-400 font-bold'}">
+      <span class="font-bold">Round #${currentRound.roundNumber}</span>: You ${
+        isWin ? "won" : "lost"
+      } 
+      <span class="${
+        isWin ? "text-[#00ff88] font-bold" : "text-red-400 font-bold"
+      }">
         Ksh${formattedAmount}
       </span>
     </div>
   </div>
 `;
 
-if (message) {
-  toast[isWin ? "success" : "error"](
-    <div dangerouslySetInnerHTML={{ __html: message }} />,
-    {
-      position: "top-center",
-      autoClose: 5000,
-      hideProgressBar: false,
-      closeOnClick: true,
-      pauseOnHover: true,
-      draggable: true,
-      className: `toast-${bet.result} rounded-lg shadow-lg border-l-4 ${
-        isWin ? 'border-[#00ff88]' : 'border-red-500'
-      }`,
-      toastId: betKey,
-      icon: false, // Disable default icon as we're using custom
-    }
-  );
-}
+      // if (message) {
+      //   toast[isWin ? "success" : "error"](
+      //     <div dangerouslySetInnerHTML={{ __html: message }} />,
+      //     {
+      //       position: "top-center",
+      //       autoClose: 5000,
+      //       hideProgressBar: false,
+      //       closeOnClick: true,
+      //       pauseOnHover: true,
+      //       draggable: true,
+      //       className: `toast-${bet.result} rounded-lg shadow-lg border-l-4 ${
+      //         isWin ? "border-[#00ff88]" : "border-red-500"
+      //       }`,
+      //       toastId: betKey,
+      //       icon: false, // Disable default icon as we're using custom
+      //     }
+      //   );
+      // }
+      if (message) {
+        toast[isWin ? "success" : "error"](
+          <div dangerouslySetInnerHTML={{ __html: message }} />,
+          {
+            position: "top-center",
+            autoClose: 5000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            className: `toast-${bet.result} rounded-lg shadow-lg border-l-4 ${
+              isWin ? "border-[#00ff88]" : "border-red-500"
+            }`,
+            toastId: betKey,
+            icon: false, // Disable default icon as we're using custom
+            style: { top: '100px' }, // Add custom style for top position
+          }
+        );
+      }
     },
     [authUser, currentRound]
   );
@@ -577,6 +602,9 @@ if (message) {
   transform: translateY(-20px);
   transition: opacity 300ms, transform 300ms;
 }
+    .Toastify__toast-container--top-center {
+    top: 50px ;
+  }
     
   `;
   // .toast-success {
@@ -694,10 +722,69 @@ if (message) {
                             />
                           </div>
                         ) : (
-                          <div className="bg-[#0a121e] rounded-lg p-5 border-t-2 border-yellow-500">
-                            <div className="flex items-center">
+                          <div className="relative">
+                            <div className="z-10 absolute top-0 left-0 right-0 bottom-0 bg-transparent "></div>
+                            <div className="bg-[#0a121e] rounded-lg p-5 absolute top-32 z-10 border-t-2 border-yellow-500">
+                              <div className="flex items-center">
+                                <svg
+                                  className="w-6 h-6 text-yellow-500 mr-2"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                  xmlns="http://www.w3.org/2000/svg">
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                                <p className="text-yellow-500 font-medium">
+                                  You already placed a bet for this round.
+                                </p>
+                              </div>
+                            </div>
+                            <div className="blur-[5px]">
+                              <div className="bg-[#0a121e] rounded-lg  border-t-2 border-[#00ff88]">
+                                <BetForm
+                                  roundId={currentRound._id}
+                                  onBetSuccess={(amount, side) => {
+                                    const msg = `Bet Ksh${amount} on ${side}!`;
+                                    if (msg) toast.success(msg);
+                                  }}
+                                  onBetError={(err) => {
+                                    if (err) toast.error(err);
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          // <div className="bg-[#0a121e] rounded-lg p-5 border-t-2 border-yellow-500">
+                          //   <div className="flex items-center">
+                          //     <svg
+                          //       className="w-6 h-6 text-yellow-500 mr-2"
+                          //       fill="none"
+                          //       stroke="currentColor"
+                          //       viewBox="0 0 24 24"
+                          //       xmlns="http://www.w3.org/2000/svg">
+                          //       <path
+                          //         strokeLinecap="round"
+                          //         strokeLinejoin="round"
+                          //         strokeWidth="2"
+                          //         d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                          //     </svg>
+                          //     <p className="text-yellow-500 font-medium">
+                          //       You already placed a bet for this round.
+                          //     </p>
+                          //   </div>
+                          // </div>
+                        )
+                      ) : (
+                        <div className="relative bg-transparent">
+                          <div className="z-10 absolute top-0 left-0 right-0 bottom-0 bg-transparent "></div>
+                          <div className="bg-[#0a121e] rounded-xl p-5 shadow-[2px_-2px_3px_#00ff88]  z-10 absolute top-32 left-5 right-5">
+                            <div className="flex items-center justify-center">
                               <svg
-                                className="w-6 h-6 text-yellow-500 mr-2"
+                                className="w-6 h-6 text-red-500 mr-2"
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -706,34 +793,47 @@ if (message) {
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                   strokeWidth="2"
-                                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                               </svg>
-                              <p className="text-yellow-500 font-medium">
-                                You already placed a bet for this round.
+                              <p className="text-red-500 font-medium ">
+                                Betting Closed
                               </p>
                             </div>
                           </div>
-                        )
-                      ) : (
-                        <div className="bg-[#0a121e] rounded-lg p-5 shadow-[4px_-4px_3px_#00ff88] ">
-                          <div className="flex items-center justify-center">
-                            <svg
-                              className="w-6 h-6 text-red-500 mr-2"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                              xmlns="http://www.w3.org/2000/svg">
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                            <p className="text-red-500 font-medium ">
-                              Betting Closed
-                            </p>
+                          <div className="blur-[5px]">
+                            <div className="bg-[#0a121e] rounded-lg  border-t-2 border-[#00ff88]">
+                              <BetForm
+                                roundId={currentRound._id}
+                                onBetSuccess={(amount, side) => {
+                                  const msg = `Bet Ksh${amount} on ${side}!`;
+                                  if (msg) toast.success(msg);
+                                }}
+                                onBetError={(err) => {
+                                  if (err) toast.error(err);
+                                }}
+                              />
+                            </div>
                           </div>
                         </div>
+                        // <div className="bg-[#0a121e] rounded-lg p-5 shadow-[4px_-4px_3px_#00ff88] ">
+                        //   <div className="flex items-center justify-center">
+                        //     <svg
+                        //       className="w-6 h-6 text-red-500 mr-2"
+                        //       fill="none"
+                        //       stroke="currentColor"
+                        //       viewBox="0 0 24 24"
+                        //       xmlns="http://www.w3.org/2000/svg">
+                        //       <path
+                        //         strokeLinecap="round"
+                        //         strokeLinejoin="round"
+                        //         strokeWidth="2"
+                        //         d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        //     </svg>
+                        //     <p className="text-red-500 font-medium ">
+                        //       Betting Closed
+                        //     </p>
+                        //   </div>
+                        // </div>
                       ))}
                   </div>
                 </div>
@@ -742,7 +842,6 @@ if (message) {
                 <RoundHistory />
               </div>
 
-   
               <div className="bg-[#09101f] rounded-xl shadow-md overflow-hidden">
                 <div className="flex border-b border-gray-800">
                   <button
@@ -787,8 +886,8 @@ if (message) {
         </div>
 
         {/* Side Panel */}
-        <div className="lg:static md:mx-0  absolute top-[87px] sm:top-[132px]  left-0 right-0  md:pt-6 bg-[#09101f] rounded-xl flex md:block lg:bg-transparent   z-10 md:z-0 border-t mx-2 sm:mx-16 justify-center items-center lg:border-t-0 border-gray-800 lg:space-y-6 shadow-2xl ">
-          <div className="bg-gradient-to-r from-[#0d1526]  to-[#09101f] rounded-xl   min-w-full md:min-w-40    shadow-[2px_0px_0px_#00ff88] ">
+        <div className="lg:static md:mx-0  absolute top-[87px]  left-0 right-0  md:pt-6 bg-[#09101f] rounded-xl flex md:block lg:bg-transparent   z-10 md:z-0 border-t mx-2 sm:mx-16 justify-center items-center lg:border-t-0 border-gray-800 lg:space-y-6 shadow-2xl ">
+          <div className="bg-gradient-to-r from-[#0d1526]  to-[#09101f] rounded-xl md:hidden lg:block  min-w-full md:min-w-40    shadow-[2px_0px_0px_#00ff88] ">
             <BetUpdates
               currentRound={currentRound}
               headBets={currentBets.head}
