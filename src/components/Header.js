@@ -131,7 +131,7 @@ function Header({ onDepositOpen, onWithdrawOpen }) {
             >
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-green-400 to-blue-500 group-hover:w-full transition-all duration-300"></span>
               <span className="group-hover:text-blue-400 transition-colors duration-150">
-                Games
+                Game
               </span>
             </a>
             <Link to="/profile" className="relative px-2 py-1 group">
@@ -142,6 +142,10 @@ function Header({ onDepositOpen, onWithdrawOpen }) {
             </Link>
             {accessToken ? (
               <>
+
+
+
+              
                 <button
                   onClick={onWithdrawOpen}
                   className="px-3 py-1.5 bg-gray-800/80 backdrop-blur-sm border border-red-500/20 text-red-400 rounded-md hover:bg-gray-700 hover:border-red-500/40 transition-all duration-300 text-sm font-medium flex items-center"

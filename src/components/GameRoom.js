@@ -652,7 +652,12 @@ const GameRoom = () => {
               <div className="mx-2 sm:mx-0">
                 <RoundHistory />
               </div>
-              <div className="bg-[#09101f] rounded-xl shadow-md overflow-hidden">
+
+
+
+
+              {/* Game Room Tabs */}
+              {/* <div className="bg-[#09101f] rounded-xl shadow-md overflow-hidden">
                 <div className="flex border-b border-gray-800">
                   <button
                     onClick={() => setActiveTab("activeBet")}
@@ -692,10 +697,82 @@ const GameRoom = () => {
                   {activeTab === "betHistory" && <UserBets />}
                   {activeTab === "topWins" && <TopWinsBets />}
                 </div>
-              </div>
-            </div>
-          )}
+              </div> */}
+
+
+              {/* Tabs Section */}
+{authUser ? (
+  <div className="bg-[#09101f] rounded-xl shadow-md overflow-hidden">
+    <div className="flex border-b border-gray-800">
+      <button
+        onClick={() => setActiveTab("activeBet")}
+        className={`flex-1 py-4 px-6 font-medium text-sm focus:outline-none transition-colors duration-200 ${
+          activeTab === "activeBet"
+            ? "text-white border-b-2 border-[#00ffd5] bg-[#0d1526]"
+            : "text-gray-400 hover:text-gray-200"
+        }`}
+      >
+        Active Bets
+      </button>
+      <button
+        onClick={() => setActiveTab("betHistory")}
+        className={`flex-1 py-4 px-6 font-medium text-sm focus:outline-none transition-colors duration-200 ${
+          activeTab === "betHistory"
+            ? "text-white border-b-2 border-[#00ffd5] bg-[#0d1526]"
+            : "text-gray-400 hover:text-gray-200"
+        }`}
+      >
+        Bet History
+      </button>
+      <button
+        onClick={() => setActiveTab("topWins")}
+        className={`flex-1 py-4 px-6 font-medium text-sm focus:outline-none transition-colors duration-200 ${
+          activeTab === "topWins"
+            ? "text-white border-b-2 border-[#00ffd5] bg-[#0d1526]"
+            : "text-gray-400 hover:text-gray-200"
+        }`}
+      >
+        Top Wins
+      </button>
+    </div>
+    <div className="p-2">
+      {activeTab === "activeBet" && (
+        <ActiveBet userActiveBets={userActiveBets} />
+      )}
+      {activeTab === "betHistory" && <UserBets />}
+      {activeTab === "topWins" && <TopWinsBets />}
+    </div>
+  </div>
+) : (
+  <div className="bg-[#09101f] rounded-xl shadow-md overflow-hidden p-4">
+    <p className="text-yellow-500 font-medium">
+      Please <Link to="/login" className="underline">log in</Link> to view your active bets and bet history.
+    </p>
+    {/* Optionally, you can still render public content such as Top Wins */}
+    <div className="mt-4">
+      <TopWinsBets />
+    </div>
+  </div>
+)}
+
+           {/* end  of Tabs Section */}
+           
+           
+           
+           
+            </div>    
+         )}
         </div>
+
+
+
+
+
+
+
+
+
+
 
         {/* Side Panel */}
         <div className="lg:static md:mx-0 absolute top-[87px] left-0 right-0 md:pt-6 bg-[#09101f] rounded-xl flex md:block lg:bg-transparent z-10 md:z-0 border-t mx-2 sm:mx-16 justify-center items-center lg:border-t-0 border-gray-800 lg:space-y-6 shadow-2xl">
