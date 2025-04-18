@@ -60,7 +60,7 @@ function Header({ onDepositOpen, onWithdrawOpen }) {
 
   return (
     <header
-      className={`bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 text-white border-b-2 border-green-900 shadow-lg fixed top-0 left-0 right-0 z-50 rounded-b-xl transition-transform duration-300 ${
+      className={`bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 text-white border-b-2 border-green-900 shadow-lg fixed top-0 left-0 right-0 z-40 rounded-b-xl transition-transform duration-300 ${
         visible ? "transform translate-y-0" : "transform -translate-y-full"
       }`}
     >

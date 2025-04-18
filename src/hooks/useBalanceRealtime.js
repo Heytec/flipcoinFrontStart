@@ -14,22 +14,22 @@ const useBalanceRealtime = () => {
   useEffect(() => {
     if (user && user.id) {
       const channelName = `user:${user.id}`;
-      console.log(channelName)
+      // console.log(channelName)
       const channel = ably.channels.get(channelName);
 
       const onBalanceUpdate = (message) => {
         // Assume message.data is in the form { balance: newBalance }
         const newBalance = message.data.balance;
-        console.log(newBalance)
+        // console.log(newBalance)
         dispatch(updateBalance(newBalance));
       };
 
       channel.subscribe('balance_update', onBalanceUpdate);
-      console.info(`Subscribed to Ably channel ${channelName} for balance updates.`);
+      // console.info(`Subscribed to Ably channel ${channelName} for balance updates.`);
 
       return () => {
         channel.unsubscribe('balance_update', onBalanceUpdate);
-        console.info(`Unsubscribed from Ably channel ${channelName}.`);
+        // console.info(`Unsubscribed from Ably channel ${channelName}.`);
       };
     }
   }, [dispatch, user]);

@@ -92,6 +92,8 @@ const RoundHistory = () => {
     [history]
   );
 
+  
+
   // Sort by newest first to show latest results
   const sortedHistory = useMemo(() => 
     [...validHistory].sort((a, b) => b.roundNumber - a.roundNumber),
@@ -178,7 +180,7 @@ const RoundHistory = () => {
           ) : (
             <div>
               <div classNa me=" overflow-hidden md:overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-                <div className={`flex flex-row  pl-0.5 justify-start gap-1 ${isExpanded&& "flex-wrap gap-3"}`}>
+                <div className={`flex flex-row  pl-0.5 justify-start gap-1.5 overflow-hidden ${isExpanded&& "flex-wrap justify-center gap-3"}`}>
                   {displayedRounds.map((round) => (
                     <RoundItem key={round._id} round={round} />
                   ))}

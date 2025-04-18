@@ -6,7 +6,7 @@ export default function ToastContainerWrapper() {
   return (
     <ToastContainer
       position="top-center"
-      autoClose={5000}
+      autoClose={3000}
       hideProgressBar={false}
       newestOnTop={false}
       closeOnClick
@@ -14,7 +14,7 @@ export default function ToastContainerWrapper() {
       pauseOnFocusLoss
       draggable
       pauseOnHover
-      style={{ top: '100px' }} // Corrected syntax: double curly braces
+      style={{ top: '80px' }} // Corrected syntax: double curly braces
     />
   );
 }

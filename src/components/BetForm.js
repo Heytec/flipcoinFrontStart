@@ -6,7 +6,7 @@ import { placeBet, clearError } from "../features/roundSlice";
 import { toast } from "react-toastify";
 import { ERROR_TYPES } from "../constants/errorTypes";
 
-const BetForm = ({ roundId }) => {
+const BetForm = ({ roundId, disabled }) => {
   const dispatch = useDispatch();
   const { loading, error, errorDetails } = useSelector((state) => state.round);
 
@@ -58,7 +58,7 @@ const BetForm = ({ roundId }) => {
         toast.success(
           `Bet placed: ${result.bet.amount} on ${result.bet.side}`,
           {
-            position: "bottom-right",
+            position: "top-center",
           }
         );
         setAmount("");
@@ -149,7 +149,7 @@ const BetForm = ({ roundId }) => {
             </div>
 
             <div className="flex justify-center gap-2">
-              {[20, 50, 100].map((value) => (
+              {[ 10, 20, 50, 100].map((value) => (
                 <button
                   key={value}
                   type="button"
@@ -185,13 +185,21 @@ const BetForm = ({ roundId }) => {
                 type="button"
                 onClick={() => handleSideSelect(option)}
                 disabled={isSubmitting || loading}
-                className={`relative flex-1 py-4 font-medium text-sm transition-all duration-300
+                className={`relative flex-1 py-4 font-medium text-sm transition-all duration-300 
               ${index === 0 ? "mr-1 rounded-l-xl" : "ml-1 rounded-r-xl"}
               ${
                 side === option
                   ? option === "heads"
-                    ? "bg-gradient-to-r from-[#00ff88] to-[#0adbdf] text-white shadow-lg border border-[#00ff88]"
-                    : "bg-gradient-to-r from-[#fd4545] to-[#d41a1a] text-white shadow-lg border border-red-500"
+                    ? ` ${
+                        disabled
+                          ? "bg-gray-500"
+                          : "bg-gradient-to-r from-[#00ff88] to-[#0adbdf] text-white shadow-lg border border-[#00ff88]"
+                      }`
+                    : `${
+                        disabled
+                          ? "bg-gray-500"
+                          : "bg-gradient-to-r from-[#fd4545] to-[#d41a1a] text-white shadow-lg border border-red-500"
+                      }`
                   : "bg-gray-800 text-gray-300 hover:bg-gray-700"
               }
               disabled:opacity-50 overflow-hidden`}>
@@ -227,7 +235,7 @@ const BetForm = ({ roundId }) => {
         </div>
 
         {/* Submit Button */}
-        <div >
+        <div>
           <button
             type="submit"
             disabled={isSubmitting || loading || !amount || !side}

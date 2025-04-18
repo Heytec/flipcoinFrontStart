@@ -97,13 +97,26 @@ export const fetchTopWins = createAsyncThunk(
   }
 );
 
-// Thunk to fetch the latest 10 rounds history (only rounds with outcomes "heads" or "tails")
+// // Thunk to fetch the latest 10 rounds history (only rounds with outcomes "heads" or "tails")
+// export const fetchRoundHistory = createAsyncThunk(
+//   "round/fetchRoundHistory",
+//   async (_, thunkAPI) => {
+//     try {
+//       const response = await axiosInstance.get("/game/round-history");
+//       // Expected response: { rounds: [ ... ] }
+//       return response.data.rounds;
+//     } catch (error) {
+//       return thunkAPI.rejectWithValue(error.response?.data || error.message);
+//     }
+//   }
+// );
+
+// Modified thunk to accept a limit parameter
 export const fetchRoundHistory = createAsyncThunk(
   "round/fetchRoundHistory",
-  async (_, thunkAPI) => {
+  async (limit = 15, thunkAPI) => {
     try {
-      const response = await axiosInstance.get("/game/round-history");
-      // Expected response: { rounds: [ ... ] }
+      const response = await axiosInstance.get(`/game/round-history?limit=${limit}`);
       return response.data.rounds;
     } catch (error) {
       return thunkAPI.rejectWithValue(error.response?.data || error.message);
@@ -153,7 +166,7 @@ const roundSlice = createSlice({
       // Clear betResults to only include bets for the new round
       state.betResults = state.betResults.filter((bet) => bet.roundId === newRound._id);
     },
-    // Update round result from real-time events
+    // Update round result from real-time eventss
     roundResultReceived: (state, action) => {
       state.currentRound = action.payload.round;
       // Clear bets for this round if resolved
