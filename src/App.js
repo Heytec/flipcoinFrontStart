@@ -1,3 +1,4 @@
+// src/App.js
 import React, { useState } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import useBalanceRealtime from "./hooks/useBalanceRealtime";
@@ -11,6 +12,10 @@ import Register from "./components/Register";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DepositModal from "./components/DepositModal";
 import WithdrawModal from "./components/WithdrawModal";
+import ToastContainerWrapper from "./components/ToastContainerWrapper"; // Import the wrapper
+
+// Optional: Import custom toast styles if moved to a separate file
+// import './ToastStyles.css';
 
 function App() {
   useBalanceRealtime();
@@ -19,6 +24,8 @@ function App() {
 
   return (
     <Router>
+      {/* Render ToastContainerWrapper once here */}
+      <ToastContainerWrapper />
       <div className="min-h-screen bg-[#091622]">
         <Header
           onDepositOpen={() => setDepositOpen(true)}
@@ -52,6 +59,93 @@ function App() {
 }
 
 export default App;
+
+
+
+
+
+
+
+
+
+
+// import React, { useState } from "react";
+// import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+// import useBalanceRealtime from "./hooks/useBalanceRealtime";
+
+// // Import components
+// import Header from "./components/Header";
+// import GameRoom from "./components/GameRoom";
+// import Profile from "./components/Profile";
+// import Login from "./components/Login";
+// import Register from "./components/Register";
+// import ProtectedRoute from "./components/ProtectedRoute";
+// import DepositModal from "./components/DepositModal";
+// import WithdrawModal from "./components/WithdrawModal";
+
+// function App() {
+//   useBalanceRealtime();
+//   const [isDepositOpen, setDepositOpen] = useState(false);
+//   const [isWithdrawOpen, setWithdrawOpen] = useState(false);
+
+//   return (
+//     <Router>
+//       <div className="min-h-screen bg-[#091622]">
+//         <Header
+//           onDepositOpen={() => setDepositOpen(true)}
+//           onWithdrawOpen={() => setWithdrawOpen(true)}
+//         />
+//         <main className="container md:max-w-full mx-auto p-1 mt-10 md:mt-0 md:p-6">
+//           <Routes>
+//             {/* Public GameRoom route */}
+//             <Route path="/" element={<GameRoom />} />
+//             <Route
+//               path="/profile"
+//               element={
+//                 <ProtectedRoute>
+//                   <Profile />
+//                 </ProtectedRoute>
+//               }
+//             />
+//             <Route path="/login" element={<Login />} />
+//             <Route path="/register" element={<Register />} />
+//           </Routes>
+//         </main>
+//         {isDepositOpen && (
+//           <DepositModal onClose={() => setDepositOpen(false)} />
+//         )}
+//         {isWithdrawOpen && (
+//           <WithdrawModal onClose={() => setWithdrawOpen(false)} />
+//         )}
+//       </div>
+//     </Router>
+//   );
+// }
+
+// export default App;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // import React, { useState } from "react";
 // import { BrowserRouter as Router, Routes, Route } from "react-router-dom";

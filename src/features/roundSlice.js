@@ -166,16 +166,39 @@ const roundSlice = createSlice({
       // Clear betResults to only include bets for the new round
       state.betResults = state.betResults.filter((bet) => bet.roundId === newRound._id);
     },
-    // Update round result from real-time eventss
+
     roundResultReceived: (state, action) => {
-      state.currentRound = action.payload.round;
-      // Clear bets for this round if resolved
-      if (state.currentRound.outcome !== null && state.currentRound.outcome !== "processing") {
-        state.betResults = state.betResults.filter(
-          (bet) => bet.roundId !== state.currentRound._id
-        );
+      const receivedRound = action.payload.round; // Get the round data
+    
+      // Only update and process if receivedRound is not null
+      if (receivedRound) {
+        state.currentRound = receivedRound;
+    
+        // Now it's safe to access outcome and _id
+        if (state.currentRound.outcome !== null && state.currentRound.outcome !== "processing") {
+          state.betResults = state.betResults.filter(
+            (bet) => bet.roundId !== state.currentRound._id
+          );
+        }
+      } else {
+        // Optional: Log an error or handle the null case appropriately
+        console.error("roundResultReceived dispatched with null round data:", action.payload);
+        // You might want to decide what happens to state.currentRound here.
+        // Maybe set it to null explicitly if that makes sense for your UI.
+        // state.currentRound = null;
       }
     },
+    // // Update round result from real-time eventss
+    // roundResultReceived: (state, action) => {
+    //   state.currentRound = action.payload.round;       
+    //   // Clear bets for this round if resolved
+    //   if (state.currentRound.outcome !== null && state.currentRound.outcome !== "processing") {
+    //     state.betResults = state.betResults.filter(
+    //       (bet) => bet.roundId !== state.currentRound._id
+    //     );
+    //   }
+    // },
+
     // Update bet result from real-time events (e.g., via Ably)
     betResultReceived: (state, action) => {
       const bet = action.payload;
