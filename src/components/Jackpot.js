@@ -1,70 +1,16 @@
-/*********************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************  */
-
 import React, { useState, useEffect, useRef } from "react";
+// *** Import useSelector and necessary selectors ***
 import { useSelector } from "react-redux";
+import { selectPoints, selectIsAuthenticated } from "../features/authSlice"; // Adjust path if needed
 import { motion, AnimatePresence } from "framer-motion";
 
-// Enhanced Confetti particle component for continuous animation
-// const Confetti = ({ color, index, totalParticles }) => {
-//   // Calculate staggered delays across the full animation duration
-//   const staggerStep = 5 / totalParticles; // Spread across 5 seconds
-//   const staggeredDelay = Math.min(index * staggerStep, 4); // Cap at 4s to ensure visibility
-  
-//   const size = Math.random() * 6 + 3;
-//   const xStart = Math.random() * 100;
-//   // Varied fall speed for more natural look
-//   const fallDuration = 2 + Math.random() * 1.5;
-//   const swayAmount = 30 + Math.random() * 30;
-  
-//   // Create different confetti shapes
-//   const isRectangle = Math.random() > 0.3;
-//   const rotation = Math.random() * 360;
-
-//   return (
-//     <motion.div
-//       className={`absolute top-0 ${isRectangle ? 'rounded-sm' : 'rounded-full'}`}
-//       style={{
-//         width: size,
-//         height: isRectangle ? size * (Math.random() + 1) : size,
-//         backgroundColor: color,
-//         left: `${xStart}%`,
-//         zIndex: -1,
-//         transform: `rotate(${rotation}deg)`,
-//       }}
-//       initial={{ y: -20, opacity: 0 }}
-//       animate={{
-//         y: ["0%", "150%"],
-//         x: [`${-swayAmount / 2}px`, "0px", `${swayAmount / 2}px`, "0px", `${-swayAmount / 4}px`],
-//         rotate: [rotation, rotation + (360 * (Math.random() > 0.5 ? 1 : -1))],
-//         opacity: [0, 1, 1, 0.7, 0],
-//       }}
-//       transition={{
-//         duration: fallDuration,
-//         ease: "easeInOut",
-//         delay: staggeredDelay,
-//         times: [0, 0.1, 0.5, 0.8, 1],
-//         x: {
-//           duration: fallDuration,
-//           ease: "easeInOut",
-//           times: [0, 0.25, 0.5, 0.75, 1],
-//         },
-//         opacity: {
-//           duration: fallDuration,
-//           ease: "easeInOut",
-//           times: [0, 0.1, 0.5, 0.8, 1],
-//         }
-//       }}
-//     />
-//   );
-// };
-
+// Confetti component remains the same...
 const Confetti = ({ color, index, totalParticles }) => {
   const staggerStep = 5 / totalParticles;
   const staggeredDelay = Math.min(index * staggerStep, 4);
-
   const size = Math.random() * 6 + 3;
   const xStart = Math.random() * 100;
-  const fallDuration = 3 + Math.random() * 2; // slightly longer for fluid fall
+  const fallDuration = 3 + Math.random() * 2;
   const swayAmount = 20 + Math.random() * 20;
   const isRectangle = Math.random() > 0.3;
   const rotation = Math.random() * 360;
@@ -73,48 +19,21 @@ const Confetti = ({ color, index, totalParticles }) => {
   return (
     <motion.div
       className={`absolute top-0 ${isRectangle ? 'rounded-sm' : 'rounded-full'}`}
-      style={{
-        width: size,
-        height: isRectangle ? size * (Math.random() + 1) : size,
-        backgroundColor: color,
-        left: `${xStart}%`,
-        zIndex: -1,
+      style={{ /* ... styles ... */
+        width: size, height: isRectangle ? size * (Math.random() + 1) : size, backgroundColor: color, left: `${xStart}%`, zIndex: -1,
       }}
       initial={{ y: -20, opacity: 0 }}
-      animate={{
+      animate={{ /* ... animation props ... */
         y: ["0%", "150%"],
-        x: [
-          `-${swayAmount}px`,
-          `-${swayAmount / 2}px`,
-          "0px",
-          `${swayAmount / 2}px`,
-          `${swayAmount}px`,
-          `${swayAmount / 2}px`,
-          "0px",
-          `-${swayAmount / 2}px`,
-          `-${swayAmount}px`,
-        ],
+        x: [ `-${swayAmount}px`, `-${swayAmount / 2}px`, "0px", `${swayAmount / 2}px`, `${swayAmount}px`, `${swayAmount / 2}px`, "0px", `-${swayAmount / 2}px`, `-${swayAmount}px`, ],
         rotate: [rotation, rotation + clockwise * 720],
         opacity: [0, 1, 1, 0.8, 0.6, 0],
       }}
-      transition={{
-        duration: fallDuration,
-        delay: staggeredDelay,
-        ease: "easeInOut",
-        times: [0, 0.15, 0.3, 0.5, 0.7, 1],
-        x: {
-          duration: fallDuration,
-          ease: "easeInOut",
-          times: [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1],
-        },
-        rotate: {
-          duration: fallDuration,
-          ease: "easeInOut",
-        },
-        opacity: {
-          duration: fallDuration,
-          ease: "easeInOut",
-        },
+      transition={{ /* ... transition props ... */
+        duration: fallDuration, delay: staggeredDelay, ease: "easeInOut", times: [0, 0.15, 0.3, 0.5, 0.7, 1],
+        x: { duration: fallDuration, ease: "easeInOut", times: [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1], },
+        rotate: { duration: fallDuration, ease: "easeInOut", },
+        opacity: { duration: fallDuration, ease: "easeInOut", },
       }}
     />
   );
@@ -122,7 +41,12 @@ const Confetti = ({ color, index, totalParticles }) => {
 
 
 function Jackpot() {
+  // Select jackpot from round state
   const { jackpot } = useSelector((state) => state.round);
+  // *** Select user points and authentication status from auth state ***
+  const userPoints = useSelector(selectPoints);
+  const isAuthenticated = useSelector(selectIsAuthenticated);
+
   const [prevJackpot, setPrevJackpot] = useState(jackpot || 0);
   const [showAnimation, setShowAnimation] = useState(false);
   const [confetti, setConfetti] = useState([]);
@@ -130,20 +54,11 @@ function Jackpot() {
   const containerRef = useRef(null);
   const confettiTimerRef = useRef(null);
 
-  // Enhanced confetti colors with better contrast
-  const confettiColors = [
-    "#FFD700", // Gold
-    "#FF8C00", // Bright Orange
-    "#00FF88", // Bright Green
-    "#FFFF00 ", // Yellow
-    "#FF3366  ", // Pink
-    "#66CCFF ", // Light Blue
-  ];
+  const confettiColors = [ "#FFD700", "#FF8C00", "#00FF88", "#FFFF00", "#FF3366", "#66CCFF", ];
 
-  // Throttled scroll handler for better performance
+  // Scroll handler (remains the same)
   useEffect(() => {
     let ticking = false;
-    
     const handleScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
@@ -154,67 +69,40 @@ function Jackpot() {
         ticking = true;
       }
     };
-
     window.addEventListener("scroll", handleScroll);
-    // Initialize on mount
     handleScroll();
-
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-    };
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Generate continuous waves of confetti for smoother animation
+  // Generate confetti batch (remains the same)
   const generateConfettiBatch = (batchIndex = 0, maxBatches = 5) => {
-    if (batchIndex >= maxBatches) return;
-    
+     if (batchIndex >= maxBatches) return;
     const isMobile = window.innerWidth < 768;
     const particlesPerBatch = isMobile ? 15 : 25;
     const totalParticles = particlesPerBatch * maxBatches;
-    
     const newConfetti = Array.from({ length: particlesPerBatch }).map((_, i) => ({
       id: `confetti-${Date.now()}-${batchIndex}-${i}`,
       color: confettiColors[Math.floor(Math.random() * confettiColors.length)],
       index: batchIndex * particlesPerBatch + i,
       totalParticles: totalParticles,
     }));
-
     setConfetti(prev => [...prev, ...newConfetti]);
-    
-    // Schedule next batch (staggered release)
     if (batchIndex < maxBatches - 1) {
       confettiTimerRef.current = setTimeout(() => {
         generateConfettiBatch(batchIndex + 1, maxBatches);
-      }, 1000); // Release a new batch every 1 second
+      }, 1000);
     }
   };
 
-  // Optimized jackpot change detection with continuous confetti animation
+  // Jackpot change detection (remains the same)
   useEffect(() => {
     if (jackpot && jackpot > prevJackpot) {
-      // Clear any existing confetti and timers
       setConfetti([]);
-      if (confettiTimerRef.current) {
-        clearTimeout(confettiTimerRef.current);
-      }
-      
+      if (confettiTimerRef.current) clearTimeout(confettiTimerRef.current);
       setShowAnimation(true);
-      
-      // Start generating confetti in batches for continuous effect
-      generateConfettiBatch(0, 5); // 5 batches over 5 seconds
-      
-      // Extended animation to 5 seconds as requested
-      const timer = setTimeout(() => {
-        setShowAnimation(false);
-        setConfetti([]);
-      }, 5000);
-
-      return () => {
-        clearTimeout(timer);
-        if (confettiTimerRef.current) {
-          clearTimeout(confettiTimerRef.current);
-        }
-      };
+      generateConfettiBatch(0, 5);
+      const timer = setTimeout(() => { setShowAnimation(false); setConfetti([]); }, 5000);
+      return () => { clearTimeout(timer); if (confettiTimerRef.current) clearTimeout(confettiTimerRef.current); };
     }
     setPrevJackpot(jackpot || 0);
   }, [jackpot, prevJackpot]);
@@ -225,84 +113,69 @@ function Jackpot() {
       className={`transition-all duration-500 ${
         isScrolled
           ? "fixed top-0 left-0 right-0 rounded-b-xl z-30"
-          : "absolute top-[207px] left-5 right-6 sm:left-16 sm:right-16 md:top-12 md:right-max z-10"
+          : "absolute top-[207px] left-5 right-6 sm:left-16 sm:right-16 md:top-12 md:right-max z-10" // Adjust positioning as needed
       } ${showAnimation ? "z-[9999]" : ""}`}
     >
       <motion.div
-        className={`bg-gradient-to-br ${
-          showAnimation
-            ? "z-50 from-yellow-400 via-yellow-600 to-orange-500"
-            : "from-[#1ec275] to-[#11d67a]"
-        } ${
+        className={`bg-gradient-to-br ${ /* ... gradient classes ... */
+          showAnimation ? "z-50 from-yellow-400 via-yellow-600 to-orange-500" : "from-[#1ec275] to-[#11d67a]"
+        } ${ /* ... rounding classes ... */
           isScrolled ? "rounded-b-xl" : "rounded-xl"
         } p-1 md:p-0 shadow-lg overflow-hidden`}
         layout
         layoutId="jackpot-container"
-        animate={{
+        animate={{ /* ... animation props ... */
           scale: showAnimation ? [1, 1.03, 1.02, 1.01, 1] : 1,
-          boxShadow: showAnimation
-            ? "0px 0px 12px rgba(255, 215, 0, 0.6)"
-            : "0px 0px 0px rgba(255, 215, 0, 0)",
+          boxShadow: showAnimation ? "0px 0px 12px rgba(255, 215, 0, 0.6)" : "0px 0px 0px rgba(255, 215, 0, 0)",
         }}
-        transition={{
+        transition={{ /* ... transition props ... */
           layout: { duration: 0.3, ease: "easeOut" },
           scale: { duration: 5, ease: "easeOut", times: [0, 0.1, 0.3, 0.7, 1] },
           boxShadow: { duration: 5, ease: "easeOut" },
         }}
         whileHover={{ scale: isScrolled ? 1 : 1.02 }}
       >
-        <div className="text-center flex items-center justify-between relative h-[50px] md:h-[60px]">
+        {/* --- Main Content Area --- */}
+        <div className="text-center flex items-center justify-between relative h-[50px] md:h-[60px] px-3"> {/* Added padding */}
+
+          {/* Jackpot Title */}
           <h3
-            className={`text-sm md:text-lg font-semibold text-white uppercase tracking-wide ml-3 ${
+            className={`text-sm md:text-lg font-semibold text-white uppercase tracking-wide ${
               showAnimation ? "font-bold" : "font-semibold"
             }`}>
             Jackpot
           </h3>
 
+          {/* Jackpot Amount */}
           <motion.p
-            className="text-sm md:text-3xl font-bold text-white drop-shadow-md mx-2 md:mx-0"
-            animate={{
+            className="text-lg md:text-3xl font-bold text-white drop-shadow-md mx-2" // Adjusted size slightly
+            animate={{ /* ... animation props ... */
               scale: showAnimation ? [1, 1.15, 1.1, 1.05, 1.02] : 1,
-              textShadow: showAnimation
-                ? ["0px 0px 0px rgba(255,255,255,0)", 
-                   "0px 0px 12px rgba(255,255,255,0.8)", 
-                   "0px 0px 8px rgba(255,255,255,0.6)",
-                   "0px 0px 5px rgba(255,255,255,0.4)",
-                   "0px 0px 3px rgba(255,255,255,0.2)"]
-                : "0px 0px 0px rgba(255,255,255,0)",
-              color: showAnimation
-                ? ["#FFFFFF", "#FFFF00", "#FFFFAA", "#FFFFDD", "#FFFFFF"]
-                : "#FFFFFF",
+              textShadow: showAnimation ? ["0px 0px 0px rgba(255,255,255,0)", "0px 0px 12px rgba(255,255,255,0.8)", "0px 0px 8px rgba(255,255,255,0.6)", "0px 0px 5px rgba(255,255,255,0.4)", "0px 0px 3px rgba(255,255,255,0.2)"] : "0px 0px 0px rgba(255,255,255,0)",
+              color: showAnimation ? ["#FFFFFF", "#FFFF00", "#FFFFAA", "#FFFFDD", "#FFFFFF"] : "#FFFFFF",
             }}
-            transition={{
-              duration: 5,
-              ease: "easeOut",
-              times: [0, 0.1, 0.3, 0.7, 1],
-            }}>
+            transition={{ duration: 5, ease: "easeOut", times: [0, 0.1, 0.3, 0.7, 1], }}>
             Ksh {Number(jackpot || 0).toFixed(2)}
           </motion.p>
 
-          <div className="md:flex md:justify-center md:gap-2 mr-3">
-            <motion.span
-              className="inline-block bg-white/20 px-3 py-1 rounded-full text-sm text-white"
-              animate={{
-                backgroundColor: showAnimation
-                  ? ["rgba(255,255,255,0.2)", 
-                     "rgba(255,255,255,0.4)", 
-                     "rgba(255,255,255,0.3)",
-                     "rgba(255,255,255,0.2)"]
-                  : "rgba(255,255,255,0.2)",
-              }}
-              transition={{
-                duration: 5,
-                ease: "easeOut",
-                times: [0, 0.2, 0.7, 1],
-              }}>
-              Total Pool
-            </motion.span>
-          </div>
+          {/* --- User Points Display (Conditional) --- */}
+          {isAuthenticated && ( // Only show if user is logged in
+            <div className="flex items-center justify-center"> {/* Centering container */}
+              <motion.span
+                className="inline-block bg-white/20 px-3 py-1 rounded-full text-xs sm:text-sm text-white font-medium" // Adjusted font weight
+                animate={{ /* ... animation props ... */
+                  backgroundColor: showAnimation ? ["rgba(255,255,255,0.2)", "rgba(255,255,255,0.4)", "rgba(255,255,255,0.3)", "rgba(255,255,255,0.2)"] : "rgba(255,255,255,0.2)",
+                }}
+                transition={{ duration: 5, ease: "easeOut", times: [0, 0.2, 0.7, 1], }}>
+                {/* Display user points */}
+                {typeof userPoints === 'number' ? `${userPoints} Points` : 'Points'} {/* Handle null/undefined points */}
+              </motion.span>
+            </div>
+          )}
+          {/* If not authenticated, this section will not render */}
 
-          {/* Enhanced confetti container with continual waves of particles */}
+
+          {/* Confetti Animation Overlay */}
           <AnimatePresence>
             {showAnimation && (
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -324,6 +197,333 @@ function Jackpot() {
 }
 
 export default Jackpot;
+
+// /*********************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************  */
+
+// import React, { useState, useEffect, useRef } from "react";
+// import { useSelector } from "react-redux";
+// import { motion, AnimatePresence } from "framer-motion";
+
+// // Enhanced Confetti particle component for continuous animation
+// // const Confetti = ({ color, index, totalParticles }) => {
+// //   // Calculate staggered delays across the full animation duration
+// //   const staggerStep = 5 / totalParticles; // Spread across 5 seconds
+// //   const staggeredDelay = Math.min(index * staggerStep, 4); // Cap at 4s to ensure visibility
+  
+// //   const size = Math.random() * 6 + 3;
+// //   const xStart = Math.random() * 100;
+// //   // Varied fall speed for more natural look
+// //   const fallDuration = 2 + Math.random() * 1.5;
+// //   const swayAmount = 30 + Math.random() * 30;
+  
+// //   // Create different confetti shapes
+// //   const isRectangle = Math.random() > 0.3;
+// //   const rotation = Math.random() * 360;
+
+// //   return (
+// //     <motion.div
+// //       className={`absolute top-0 ${isRectangle ? 'rounded-sm' : 'rounded-full'}`}
+// //       style={{
+// //         width: size,
+// //         height: isRectangle ? size * (Math.random() + 1) : size,
+// //         backgroundColor: color,
+// //         left: `${xStart}%`,
+// //         zIndex: -1,
+// //         transform: `rotate(${rotation}deg)`,
+// //       }}
+// //       initial={{ y: -20, opacity: 0 }}
+// //       animate={{
+// //         y: ["0%", "150%"],
+// //         x: [`${-swayAmount / 2}px`, "0px", `${swayAmount / 2}px`, "0px", `${-swayAmount / 4}px`],
+// //         rotate: [rotation, rotation + (360 * (Math.random() > 0.5 ? 1 : -1))],
+// //         opacity: [0, 1, 1, 0.7, 0],
+// //       }}
+// //       transition={{
+// //         duration: fallDuration,
+// //         ease: "easeInOut",
+// //         delay: staggeredDelay,
+// //         times: [0, 0.1, 0.5, 0.8, 1],
+// //         x: {
+// //           duration: fallDuration,
+// //           ease: "easeInOut",
+// //           times: [0, 0.25, 0.5, 0.75, 1],
+// //         },
+// //         opacity: {
+// //           duration: fallDuration,
+// //           ease: "easeInOut",
+// //           times: [0, 0.1, 0.5, 0.8, 1],
+// //         }
+// //       }}
+// //     />
+// //   );
+// // };
+
+// const Confetti = ({ color, index, totalParticles }) => {
+//   const staggerStep = 5 / totalParticles;
+//   const staggeredDelay = Math.min(index * staggerStep, 4);
+
+//   const size = Math.random() * 6 + 3;
+//   const xStart = Math.random() * 100;
+//   const fallDuration = 3 + Math.random() * 2; // slightly longer for fluid fall
+//   const swayAmount = 20 + Math.random() * 20;
+//   const isRectangle = Math.random() > 0.3;
+//   const rotation = Math.random() * 360;
+//   const clockwise = Math.random() > 0.5 ? 1 : -1;
+
+//   return (
+//     <motion.div
+//       className={`absolute top-0 ${isRectangle ? 'rounded-sm' : 'rounded-full'}`}
+//       style={{
+//         width: size,
+//         height: isRectangle ? size * (Math.random() + 1) : size,
+//         backgroundColor: color,
+//         left: `${xStart}%`,
+//         zIndex: -1,
+//       }}
+//       initial={{ y: -20, opacity: 0 }}
+//       animate={{
+//         y: ["0%", "150%"],
+//         x: [
+//           `-${swayAmount}px`,
+//           `-${swayAmount / 2}px`,
+//           "0px",
+//           `${swayAmount / 2}px`,
+//           `${swayAmount}px`,
+//           `${swayAmount / 2}px`,
+//           "0px",
+//           `-${swayAmount / 2}px`,
+//           `-${swayAmount}px`,
+//         ],
+//         rotate: [rotation, rotation + clockwise * 720],
+//         opacity: [0, 1, 1, 0.8, 0.6, 0],
+//       }}
+//       transition={{
+//         duration: fallDuration,
+//         delay: staggeredDelay,
+//         ease: "easeInOut",
+//         times: [0, 0.15, 0.3, 0.5, 0.7, 1],
+//         x: {
+//           duration: fallDuration,
+//           ease: "easeInOut",
+//           times: [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1],
+//         },
+//         rotate: {
+//           duration: fallDuration,
+//           ease: "easeInOut",
+//         },
+//         opacity: {
+//           duration: fallDuration,
+//           ease: "easeInOut",
+//         },
+//       }}
+//     />
+//   );
+// };
+
+
+// function Jackpot() {
+//   const { jackpot } = useSelector((state) => state.round);
+//   const [prevJackpot, setPrevJackpot] = useState(jackpot || 0);
+//   const [showAnimation, setShowAnimation] = useState(false);
+//   const [confetti, setConfetti] = useState([]);
+//   const [isScrolled, setIsScrolled] = useState(false);
+//   const containerRef = useRef(null);
+//   const confettiTimerRef = useRef(null);
+
+//   // Enhanced confetti colors with better contrast
+//   const confettiColors = [
+//     "#FFD700", // Gold
+//     "#FF8C00", // Bright Orange
+//     "#00FF88", // Bright Green
+//     "#FFFF00 ", // Yellow
+//     "#FF3366  ", // Pink
+//     "#66CCFF ", // Light Blue
+//   ];
+
+//   // Throttled scroll handler for better performance
+//   useEffect(() => {
+//     let ticking = false;
+    
+//     const handleScroll = () => {
+//       if (!ticking) {
+//         window.requestAnimationFrame(() => {
+//           const scrollPosition = window.scrollY;
+//           setIsScrolled(scrollPosition > 100);
+//           ticking = false;
+//         });
+//         ticking = true;
+//       }
+//     };
+
+//     window.addEventListener("scroll", handleScroll);
+//     // Initialize on mount
+//     handleScroll();
+
+//     return () => {
+//       window.removeEventListener("scroll", handleScroll);
+//     };
+//   }, []);
+
+//   // Generate continuous waves of confetti for smoother animation
+//   const generateConfettiBatch = (batchIndex = 0, maxBatches = 5) => {
+//     if (batchIndex >= maxBatches) return;
+    
+//     const isMobile = window.innerWidth < 768;
+//     const particlesPerBatch = isMobile ? 15 : 25;
+//     const totalParticles = particlesPerBatch * maxBatches;
+    
+//     const newConfetti = Array.from({ length: particlesPerBatch }).map((_, i) => ({
+//       id: `confetti-${Date.now()}-${batchIndex}-${i}`,
+//       color: confettiColors[Math.floor(Math.random() * confettiColors.length)],
+//       index: batchIndex * particlesPerBatch + i,
+//       totalParticles: totalParticles,
+//     }));
+
+//     setConfetti(prev => [...prev, ...newConfetti]);
+    
+//     // Schedule next batch (staggered release)
+//     if (batchIndex < maxBatches - 1) {
+//       confettiTimerRef.current = setTimeout(() => {
+//         generateConfettiBatch(batchIndex + 1, maxBatches);
+//       }, 1000); // Release a new batch every 1 second
+//     }
+//   };
+
+//   // Optimized jackpot change detection with continuous confetti animation
+//   useEffect(() => {
+//     if (jackpot && jackpot > prevJackpot) {
+//       // Clear any existing confetti and timers
+//       setConfetti([]);
+//       if (confettiTimerRef.current) {
+//         clearTimeout(confettiTimerRef.current);
+//       }
+      
+//       setShowAnimation(true);
+      
+//       // Start generating confetti in batches for continuous effect
+//       generateConfettiBatch(0, 5); // 5 batches over 5 seconds
+      
+//       // Extended animation to 5 seconds as requested
+//       const timer = setTimeout(() => {
+//         setShowAnimation(false);
+//         setConfetti([]);
+//       }, 5000);
+
+//       return () => {
+//         clearTimeout(timer);
+//         if (confettiTimerRef.current) {
+//           clearTimeout(confettiTimerRef.current);
+//         }
+//       };
+//     }
+//     setPrevJackpot(jackpot || 0);
+//   }, [jackpot, prevJackpot]);
+
+//   return (
+//     <div
+//       ref={containerRef}
+//       className={`transition-all duration-500 ${
+//         isScrolled
+//           ? "fixed top-0 left-0 right-0 rounded-b-xl z-30"
+//           : "absolute top-[207px] left-5 right-6 sm:left-16 sm:right-16 md:top-12 md:right-max z-10"
+//       } ${showAnimation ? "z-[9999]" : ""}`}
+//     >
+//       <motion.div
+//         className={`bg-gradient-to-br ${
+//           showAnimation
+//             ? "z-50 from-yellow-400 via-yellow-600 to-orange-500"
+//             : "from-[#1ec275] to-[#11d67a]"
+//         } ${
+//           isScrolled ? "rounded-b-xl" : "rounded-xl"
+//         } p-1 md:p-0 shadow-lg overflow-hidden`}
+//         layout
+//         layoutId="jackpot-container"
+//         animate={{
+//           scale: showAnimation ? [1, 1.03, 1.02, 1.01, 1] : 1,
+//           boxShadow: showAnimation
+//             ? "0px 0px 12px rgba(255, 215, 0, 0.6)"
+//             : "0px 0px 0px rgba(255, 215, 0, 0)",
+//         }}
+//         transition={{
+//           layout: { duration: 0.3, ease: "easeOut" },
+//           scale: { duration: 5, ease: "easeOut", times: [0, 0.1, 0.3, 0.7, 1] },
+//           boxShadow: { duration: 5, ease: "easeOut" },
+//         }}
+//         whileHover={{ scale: isScrolled ? 1 : 1.02 }}
+//       >
+//         <div className="text-center flex items-center justify-between relative h-[50px] md:h-[60px]">
+//           <h3
+//             className={`text-sm md:text-lg font-semibold text-white uppercase tracking-wide ml-3 ${
+//               showAnimation ? "font-bold" : "font-semibold"
+//             }`}>
+//             Jackpot
+//           </h3>
+
+//           <motion.p
+//             className="text-sm md:text-3xl font-bold text-white drop-shadow-md mx-2 md:mx-0"
+//             animate={{
+//               scale: showAnimation ? [1, 1.15, 1.1, 1.05, 1.02] : 1,
+//               textShadow: showAnimation
+//                 ? ["0px 0px 0px rgba(255,255,255,0)", 
+//                    "0px 0px 12px rgba(255,255,255,0.8)", 
+//                    "0px 0px 8px rgba(255,255,255,0.6)",
+//                    "0px 0px 5px rgba(255,255,255,0.4)",
+//                    "0px 0px 3px rgba(255,255,255,0.2)"]
+//                 : "0px 0px 0px rgba(255,255,255,0)",
+//               color: showAnimation
+//                 ? ["#FFFFFF", "#FFFF00", "#FFFFAA", "#FFFFDD", "#FFFFFF"]
+//                 : "#FFFFFF",
+//             }}
+//             transition={{
+//               duration: 5,
+//               ease: "easeOut",
+//               times: [0, 0.1, 0.3, 0.7, 1],
+//             }}>
+//             Ksh {Number(jackpot || 0).toFixed(2)}
+//           </motion.p>
+
+//           <div className="md:flex md:justify-center md:gap-2 mr-3">
+//             <motion.span
+//               className="inline-block bg-white/20 px-3 py-1 rounded-full text-sm text-white"
+//               animate={{
+//                 backgroundColor: showAnimation
+//                   ? ["rgba(255,255,255,0.2)", 
+//                      "rgba(255,255,255,0.4)", 
+//                      "rgba(255,255,255,0.3)",
+//                      "rgba(255,255,255,0.2)"]
+//                   : "rgba(255,255,255,0.2)",
+//               }}
+//               transition={{
+//                 duration: 5,
+//                 ease: "easeOut",
+//                 times: [0, 0.2, 0.7, 1],
+//               }}>
+//               Total Pool
+//             </motion.span>
+//           </div>
+
+//           {/* Enhanced confetti container with continual waves of particles */}
+//           <AnimatePresence>
+//             {showAnimation && (
+//               <div className="absolute inset-0 overflow-hidden pointer-events-none">
+//                 {confetti.map((particle) => (
+//                   <Confetti
+//                     key={particle.id}
+//                     color={particle.color}
+//                     index={particle.index}
+//                     totalParticles={particle.totalParticles}
+//                   />
+//                 ))}
+//               </div>
+//             )}
+//           </AnimatePresence>
+//         </div>
+//       </motion.div>
+//     </div>
+//   );
+// }
+
+// export default Jackpot;
 
 
 

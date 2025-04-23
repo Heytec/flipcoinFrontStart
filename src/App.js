@@ -1,64 +1,165 @@
 // src/App.js
-import React, { useState } from "react";
+import React, { useState, useEffect, Suspense, lazy } from "react"; // Import Suspense and lazy
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { useDispatch } from "react-redux";
+
+// Hooks
 import useBalanceRealtime from "./hooks/useBalanceRealtime";
 
-// Import components
+// Redux Actions/Thunks
+import { fetchJackpotPool } from "./features/roundSlice";
+
+// Components (Core Layout & Eagerly Loaded)
 import Header from "./components/Header";
-import GameRoom from "./components/GameRoom";
-import Profile from "./components/Profile";
-import Login from "./components/Login";
-import Register from "./components/Register";
 import ProtectedRoute from "./components/ProtectedRoute";
-import DepositModal from "./components/DepositModal";
-import WithdrawModal from "./components/WithdrawModal";
-import ToastContainerWrapper from "./components/ToastContainerWrapper"; // Import the wrapper
+import ToastContainerWrapper from "./components/ToastContainerWrapper";
+import LoadingSpinner from "./components/LoadingSpinner"; // Assuming you have a loading component
+
+// Lazy-loaded Route Components
+const GameRoom = lazy(() => import("./components/GameRoom"));
+const Profile = lazy(() => import("./components/Profile"));
+const Login = lazy(() => import("./components/Login"));
+const Register = lazy(() => import("./components/Register"));
+
+// Lazy-loaded Modal Components (Optional, but can be good if they are large)
+const DepositModal = lazy(() => import("./components/DepositModal"));
+const WithdrawModal = lazy(() => import("./components/WithdrawModal"));
 
 // Optional: Import custom toast styles if moved to a separate file
 // import './ToastStyles.css';
 
 function App() {
+  const dispatch = useDispatch();
+  // Custom hook likely sets up listeners or fetches real-time balance updates
   useBalanceRealtime();
+
+  // State for controlling modal visibility
   const [isDepositOpen, setDepositOpen] = useState(false);
   const [isWithdrawOpen, setWithdrawOpen] = useState(false);
 
+  // Fetch initial application data on component mount
+  useEffect(() => {
+    // Fetch the current jackpot amount. Error handling should be managed within the thunk/slice.
+    dispatch(fetchJackpotPool());
+
+    // Consider fetching other essential initial data here if needed.
+    // Example: dispatch(fetchUserProfile());
+  }, [dispatch]); // dispatch is stable, effect runs once on mount
+
+  const openDepositModal = () => setDepositOpen(true);
+  const closeDepositModal = () => setDepositOpen(false);
+  const openWithdrawModal = () => setWithdrawOpen(true);
+  const closeWithdrawModal = () => setWithdrawOpen(false);
+
   return (
     <Router>
-      {/* Render ToastContainerWrapper once here */}
+      {/* Global Toast Container */}
       <ToastContainerWrapper />
-      <div className="min-h-screen bg-[#091622]">
+
+      <div className="min-h-screen bg-[#091622] text-gray-100"> {/* Added default text color */}
         <Header
-          onDepositOpen={() => setDepositOpen(true)}
-          onWithdrawOpen={() => setWithdrawOpen(true)}
+          onDepositOpen={openDepositModal}
+          onWithdrawOpen={openWithdrawModal}
         />
+
         <main className="container md:max-w-full mx-auto p-1 mt-10 md:mt-0 md:p-6">
-          <Routes>
-            {/* Public GameRoom route */}
-            <Route path="/" element={<GameRoom />} />
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <Profile />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-          </Routes>
+          {/* Suspense handles the loading state for lazy-loaded components */}
+          <Suspense fallback={<LoadingSpinner />}> {/* Replace LoadingSpinner with your actual loading indicator */}
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/" element={<GameRoom />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+
+              {/* Protected Routes */}
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <Profile />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Add other routes as needed */}
+            </Routes>
+          </Suspense>
         </main>
-        {isDepositOpen && (
-          <DepositModal onClose={() => setDepositOpen(false)} />
-        )}
-        {isWithdrawOpen && (
-          <WithdrawModal onClose={() => setWithdrawOpen(false)} />
-        )}
+
+        {/* Conditionally render modals using Suspense */}
+        <Suspense fallback={null}> {/* Modals likely don't need a heavy spinner */}
+          {isDepositOpen && <DepositModal onClose={closeDepositModal} />}
+          {isWithdrawOpen && <WithdrawModal onClose={closeWithdrawModal} />}
+        </Suspense>
       </div>
     </Router>
   );
 }
 
 export default App;
+
+
+
+
+// import React, { useState } from "react";
+// import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+// import useBalanceRealtime from "./hooks/useBalanceRealtime";
+
+// // Import components
+// import Header from "./components/Header";
+// import GameRoom from "./components/GameRoom";
+// import Profile from "./components/Profile";
+// import Login from "./components/Login";
+// import Register from "./components/Register";
+// import ProtectedRoute from "./components/ProtectedRoute";
+// import DepositModal from "./components/DepositModal";
+// import WithdrawModal from "./components/WithdrawModal";
+// import ToastContainerWrapper from "./components/ToastContainerWrapper"; // Import the wrapper
+
+// // Optional: Import custom toast styles if moved to a separate file
+// // import './ToastStyles.css';
+
+// function App() {
+//   useBalanceRealtime();
+//   const [isDepositOpen, setDepositOpen] = useState(false);
+//   const [isWithdrawOpen, setWithdrawOpen] = useState(false);
+
+//   return (
+//     <Router>
+//       {/* Render ToastContainerWrapper once here */}
+//       <ToastContainerWrapper />
+//       <div className="min-h-screen bg-[#091622]">
+//         <Header
+//           onDepositOpen={() => setDepositOpen(true)}
+//           onWithdrawOpen={() => setWithdrawOpen(true)}
+//         />
+//         <main className="container md:max-w-full mx-auto p-1 mt-10 md:mt-0 md:p-6">
+//           <Routes>
+//             {/* Public GameRoom route */}
+//             <Route path="/" element={<GameRoom />} />
+//             <Route
+//               path="/profile"
+//               element={
+//                 <ProtectedRoute>
+//                   <Profile />
+//                 </ProtectedRoute>
+//               }
+//             />
+//             <Route path="/login" element={<Login />} />
+//             <Route path="/register" element={<Register />} />
+//           </Routes>
+//         </main>
+//         {isDepositOpen && (
+//           <DepositModal onClose={() => setDepositOpen(false)} />
+//         )}
+//         {isWithdrawOpen && (
+//           <WithdrawModal onClose={() => setWithdrawOpen(false)} />
+//         )}
+//       </div>
+//     </Router>
+//   );
+// }
+
+// export default App;
 
 
 

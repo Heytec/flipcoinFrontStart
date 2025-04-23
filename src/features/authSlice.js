@@ -4,20 +4,17 @@ import axiosInstance from "../app/axiosInstance"; // Ensure this path is correct
 import {
   ERROR_TYPES,
   ERROR_MESSAGES,
-  // Assuming these helpers exist and are imported correctly from errorTypes.js
-  // If not, the extractError function will use defaults.
   getErrorSeverity,
   shouldReportError
 } from '../constants/errorTypes'; // Ensure this path is correct
 
-// --- Updated Error Types ---
+// --- Error Types and Messages (remain the same) ---
 const AUTH_ERROR_TYPES = {
-  ...ERROR_TYPES, // Include base error types if defined in errorTypes.js
-  SEND_OTP_FAILED:   'SEND_OTP_FAILED',   // Keep for now, review usage
-  VERIFY_OTP_FAILED: 'VERIFY_OTP_FAILED', // Keep for now, review usage
+  // ... (keep existing error types)
+  SEND_OTP_FAILED:   'SEND_OTP_FAILED',
+  VERIFY_OTP_FAILED: 'VERIFY_OTP_FAILED',
   USER_EXISTS:       'USER_EXISTS',
   OTP_INVALID:       'OTP_INVALID',
-  // OTP_EXPIRED:       'OTP_EXPIRED', // REMOVED - Backend sends OTP_INVALID for this
   INVALID_PHONE:     'INVALID_PHONE',
   VALIDATION_ERROR:  'VALIDATION_ERROR',
   NOT_FOUND:         'NOT_FOUND',
@@ -25,357 +22,178 @@ const AUTH_ERROR_TYPES = {
   REVOKED_SESSION:   'REVOKED_SESSION',
   EXPIRED_SESSION:   'EXPIRED_SESSION',
   INVALID_TOKEN:     'INVALID_TOKEN',
-  INVALID_MODE:      'INVALID_MODE'       // ADDED - For invalid 'mode' in otp/send
+  INVALID_MODE:      'INVALID_MODE'
 };
 
-// --- Updated Error Messages ---
 const AUTH_ERROR_MESSAGES = {
-  ...ERROR_MESSAGES, // Include base messages if defined in errorTypes.js
+  // ... (keep existing error messages)
   [AUTH_ERROR_TYPES.INVALID_PHONE]: 'Please enter a valid phone number (e.g., 07XXXXXXXX or +254XXXXXXXXX).',
   [AUTH_ERROR_TYPES.USER_EXISTS]: 'This phone number is already registered. Please login instead.',
   [AUTH_ERROR_TYPES.NOT_FOUND]: 'No account found with this phone number. Please register first.',
-  [AUTH_ERROR_TYPES.OTP_INVALID]: 'Invalid or expired verification code. Please try again or request a new one.', // Updated message
-  // [AUTH_ERROR_TYPES.OTP_EXPIRED]: 'Verification code has expired. Please request a new one.', // REMOVED
-  [AUTH_ERROR_TYPES.VALIDATION_ERROR]: 'Please check your input and try again.', // Generic validation message
+  [AUTH_ERROR_TYPES.OTP_INVALID]: 'Invalid or expired verification code. Please try again or request a new one.',
+  [AUTH_ERROR_TYPES.VALIDATION_ERROR]: 'Please check your input and try again.',
   [AUTH_ERROR_TYPES.UNAUTHORIZED]: 'Unauthorized access. Please login again.',
   [AUTH_ERROR_TYPES.REVOKED_SESSION]: 'Your session has been revoked. Please login again.',
   [AUTH_ERROR_TYPES.EXPIRED_SESSION]: 'Your session has expired. Please login again.',
   [AUTH_ERROR_TYPES.INVALID_TOKEN]: 'Invalid token. Please login again.',
-  [AUTH_ERROR_TYPES.SEND_OTP_FAILED]: 'Failed to send verification code. Please try again.', // Keep for now
-  [AUTH_ERROR_TYPES.VERIFY_OTP_FAILED]: 'Failed to verify code. Please try again.', // Keep for now
-  [AUTH_ERROR_TYPES.INVALID_MODE]: 'An invalid operation mode was specified. Please contact support.', // ADDED Message
-  // Add fallbacks from ERROR_TYPES if they exist and are needed
+  [AUTH_ERROR_TYPES.SEND_OTP_FAILED]: 'Failed to send verification code. Please try again.',
+  [AUTH_ERROR_TYPES.VERIFY_OTP_FAILED]: 'Failed to verify code. Please try again.',
+  [AUTH_ERROR_TYPES.INVALID_MODE]: 'An invalid operation mode was specified. Please contact support.',
   [ERROR_TYPES.SERVICE_UNAVAILABLE]: ERROR_MESSAGES[ERROR_TYPES.SERVICE_UNAVAILABLE] || 'Cannot connect to the server. Please check your internet connection.',
   [ERROR_TYPES.UNKNOWN_ERROR]: ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR] || 'An unexpected error occurred. Please try again.'
 };
 
-// --- Updated extractError Helper Function ---
+// --- extractError Helper Function (remains the same) ---
 const extractError = (error) => {
   const data = error.response?.data;
   const defaultSeverity = 'error';
   const defaultShouldReport = true;
 
-  // Helper to safely get severity
   const getSeverity = (code) => {
     try {
-      // Check if getErrorSeverity function exists before calling
       return typeof getErrorSeverity === 'function' ? getErrorSeverity(code) : defaultSeverity;
-    } catch {
-      return defaultSeverity;
-    }
+    } catch { return defaultSeverity; }
   };
-
-  // Helper to safely get reporting status
   const getShouldReport = (code) => {
     try {
-      // Check if shouldReportError function exists before calling
       return typeof shouldReportError === 'function' ? shouldReportError(code) : defaultShouldReport;
-    } catch {
-      return defaultShouldReport;
-    }
+    } catch { return defaultShouldReport; }
   };
 
-  // 1) Standard APIError structure (root level)
+  // 1) Standard APIError structure
   if (data?.code) {
     const { code, message, details } = data;
-    // Prioritize specific message from map, fallback to backend message, then generic unknown error message
     const userMessage = AUTH_ERROR_MESSAGES[code] || message || AUTH_ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR];
-
-    // 1.a) Bulk validation errors (e.g., from express-validator)
     if (code === AUTH_ERROR_TYPES.VALIDATION_ERROR && details?.errors && Array.isArray(details.errors)) {
       const fieldErrors = details.errors;
-      // Join specific messages from backend if available
-      const flatMessage = fieldErrors
-        .map(e => e.msg || e.message) // Prefer 'msg'
-        .filter(Boolean)
-        .join('; ') || AUTH_ERROR_MESSAGES[code]; // Fallback to generic validation message
-
-      return {
-        message: flatMessage,
-        code,
-        details: fieldErrors, // Keep details for potential inline display
-        severity: 'warning',
-        timestamp: new Date().toISOString(),
-        shouldReport: false // Don't usually report validation errors
-      };
+      const flatMessage = fieldErrors.map(e => e.msg || e.message).filter(Boolean).join('; ') || AUTH_ERROR_MESSAGES[code];
+      return { message: flatMessage, code, details: fieldErrors, severity: 'warning', timestamp: new Date().toISOString(), shouldReport: false };
     }
-
-    // 1.b) Single field validation or other errors with details object
-    // Check if details exist, is an object, and is not the bulk error case already handled
     if (details && typeof details === 'object' && !(code === AUTH_ERROR_TYPES.VALIDATION_ERROR && details?.errors)) {
-       // If details has its own message (like from APIError.validationError), use it, otherwise use the mapped/backend message
        const specificMessage = details.message || userMessage;
-       return {
-         message: specificMessage,
-         code,
-         details, // Keep the details object
-         severity: getSeverity(code),
-         timestamp: new Date().toISOString(),
-         shouldReport: getShouldReport(code)
-       };
+       return { message: specificMessage, code, details, severity: getSeverity(code), timestamp: new Date().toISOString(), shouldReport: getShouldReport(code) };
      }
-
-    // 1.c) All other APIError codes (without specific details structure or handled above)
-    return {
-      message: userMessage, // Use the mapped message or fallback
-      code,
-      details: details || null, // Ensure details is null if not present/relevant
-      severity: getSeverity(code),
-      timestamp: new Date().toISOString(),
-      shouldReport: getShouldReport(code)
-    };
+    return { message: userMessage, code, details: details || null, severity: getSeverity(code), timestamp: new Date().toISOString(), shouldReport: getShouldReport(code) };
   }
-
-  // 2) Legacy shape under data.error (Simplified handling)
+  // 2) Legacy shape under data.error
   if (data?.error?.code) {
      const { code, message, details } = data.error;
-     // Prioritize specific message from map, fallback to backend message, then generic unknown error message
      const userMessage = AUTH_ERROR_MESSAGES[code] || message || AUTH_ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR];
-     // Basic handling, similar to 1.c but using data.error properties
-     return {
-       message: userMessage,
-       code,
-       details: details || null,
-       severity: getSeverity(code),
-       timestamp: new Date().toISOString(),
-       shouldReport: getShouldReport(code)
-     };
+     return { message: userMessage, code, details: details || null, severity: getSeverity(code), timestamp: new Date().toISOString(), shouldReport: getShouldReport(code) };
   }
-
-  // 3) Network errors (Axios specific: no response or explicit message)
+  // 3) Network errors
   if (error.message === 'Network Error' || !error.response) {
-    return {
-      message: AUTH_ERROR_MESSAGES[ERROR_TYPES.SERVICE_UNAVAILABLE],
-      code: ERROR_TYPES.SERVICE_UNAVAILABLE,
-      details: null,
-      severity: 'error',
-      timestamp: new Date().toISOString(),
-      shouldReport: true // Network errors should usually be reported
-    };
+    return { message: AUTH_ERROR_MESSAGES[ERROR_TYPES.SERVICE_UNAVAILABLE], code: ERROR_TYPES.SERVICE_UNAVAILABLE, details: null, severity: 'error', timestamp: new Date().toISOString(), shouldReport: true };
   }
-
-  // 4) Fallback for other unexpected JS errors or unknown structures
-  console.error("Unknown error structure encountered in extractError:", error); // Log the raw error
-  return {
-    message: AUTH_ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR], // Fallback message
-    code: ERROR_TYPES.UNKNOWN_ERROR, // Fallback code
-    details: { rawError: error.message }, // Include raw message in details for context
-    severity: 'error',
-    timestamp: new Date().toISOString(),
-    shouldReport: true // Report unknown errors
-  };
+  // 4) Fallback
+  console.error("Unknown error structure encountered in extractError:", error);
+  return { message: AUTH_ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR], code: ERROR_TYPES.UNKNOWN_ERROR, details: { rawError: error.message }, severity: 'error', timestamp: new Date().toISOString(), shouldReport: true };
 };
 
 
-// --- Updated Thunks ---
+// --- Thunks (sendOTP, verifyOTP, performLogout - remain the same, including logging and error suggestions) ---
 
-export const sendOTP = createAsyncThunk(
+export const sendOTP = createAsyncThunk(/* ... as before ... */
   "auth/sendOTP",
   async ({ phone, mode }, { rejectWithValue }) => {
     try {
       const response = await axiosInstance.post("/otp/send", { phone, mode });
-      // Assuming backend sends { message, expiresIn } on success
       return {
-        message: response.data?.message || 'OTP sent successfully.', // Use backend message or default
+        message: response.data?.message || 'OTP sent successfully.',
         expiresIn: response.data?.expiresIn,
         timestamp: new Date().toISOString()
       };
     } catch (err) {
-      // --- START: Detailed Error Logging ---
-      console.error("--- Raw Axios Error in sendOTP ---");
-      if (err.response) {
-        // Log details if the server responded
-        console.error("Status:", err.response.status);
-        // Use try-catch for JSON.stringify in case data is not valid JSON
-        try {
-            console.error("Data:", JSON.stringify(err.response.data, null, 2));
-        } catch (e) {
-            console.error("Data (non-JSON or failed to stringify):", err.response.data);
-        }
-        console.error("Headers:", JSON.stringify(err.response.headers, null, 2));
-      } else if (err.request) {
-        // Log details if the request was made but no response received
-        console.error("No response received. Request details:", err.request);
-      } else {
-        // Log details if there was an error setting up the request
-        console.error("Error setting up request:", err.message);
-      }
-      console.error("Error Message:", err.message); // Log the basic error message
-      // --- END: Detailed Error Logging ---
-
-      // Process the error AFTER logging its raw form
+      console.error("--- Raw Axios Error in sendOTP ---"); // Keep logging
+      if (err.response) { console.error("Status:", err.response.status); try { console.error("Data:", JSON.stringify(err.response.data, null, 2)); } catch (e) { console.error("Data (non-JSON):", err.response.data); } console.error("Headers:", JSON.stringify(err.response.headers, null, 2)); } else if (err.request) { console.error("No response:", err.request); } else { console.error("Setup Error:", err.message); } console.error("Message:", err.message);
       const errorData = extractError(err);
-
-      // Log the processed error structure that will be stored in Redux state
-      console.error('Processed Error Data (to be stored in state):', JSON.stringify(errorData, null, 2));
-
-      return rejectWithValue(errorData); // Pass the structured error object to the reducer
+      console.error('Processed Error Data (sendOTP):', JSON.stringify(errorData, null, 2));
+      return rejectWithValue(errorData);
     }
   }
 );
 
-export const verifyOTP = createAsyncThunk(
+export const verifyOTP = createAsyncThunk(/* ... as before ... */
   "auth/verifyOTP",
   async ({ phone, code, mode }, { rejectWithValue }) => {
     try {
-      // Step 1: Verify OTP
       await axiosInstance.post("/otp/verify", { phone, code });
-      // If verify fails, backend throws OTP_INVALID (as per current code)
-
-      // Step 2: Proceed to Login or Register
       const endpoint = mode === "register" ? "/auth/register" : "/auth/login";
-      const response = await axiosInstance.post(endpoint, { phone, code }); // Send code again
+      const response = await axiosInstance.post(endpoint, { phone, code });
 
-      // Validate response structure
       if (!response.data?.data?.user || !response.data?.data?.tokens) {
           console.error("Invalid response structure from auth endpoint:", response.data);
-          // Throw an error that extractError can hopefully parse, or create a specific one
           const err = new Error('Received invalid data after authentication.');
-          err.response = { data: { code: ERROR_TYPES.UNKNOWN_ERROR, message: err.message } }; // Simulate APIError structure
+          err.response = { data: { code: ERROR_TYPES.UNKNOWN_ERROR, message: err.message } };
           throw err;
       }
       const { user, tokens } = response.data.data;
 
       return {
-        user,
+        user, // This user object should contain balance and points
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         timestamp: new Date().toISOString()
       };
     } catch (err) {
-       // --- START: Detailed Error Logging for verifyOTP ---
-       console.error("--- Raw Axios Error in verifyOTP ---");
-       if (err.response) {
-         console.error("Status:", err.response.status);
-         try {
-             console.error("Data:", JSON.stringify(err.response.data, null, 2));
-         } catch (e) {
-             console.error("Data (non-JSON or failed to stringify):", err.response.data);
-         }
-         console.error("Headers:", JSON.stringify(err.response.headers, null, 2));
-       } else if (err.request) {
-         console.error("No response received. Request details:", err.request);
-       } else {
-         console.error("Error setting up request:", err.message);
-       }
-       console.error("Error Message:", err.message);
-       // --- END: Detailed Error Logging for verifyOTP ---
-
+       console.error("--- Raw Axios Error in verifyOTP ---"); // Keep logging
+       if (err.response) { console.error("Status:", err.response.status); try { console.error("Data:", JSON.stringify(err.response.data, null, 2)); } catch (e) { console.error("Data (non-JSON):", err.response.data); } console.error("Headers:", JSON.stringify(err.response.headers, null, 2)); } else if (err.request) { console.error("No response:", err.request); } else { console.error("Setup Error:", err.message); } console.error("Message:", err.message);
       const errorData = extractError(err);
-
-      // --- Updated Suggestions Logic ---
+      // Add suggestions based on error code (keep this logic)
       switch (errorData.code) {
-        case AUTH_ERROR_TYPES.USER_EXISTS:
-          errorData.suggestion = 'This phone number is already registered. Please login instead.';
-          errorData.action = 'NAV_LOGIN'; // Action for UI to navigate
-          break;
-        case AUTH_ERROR_TYPES.NOT_FOUND:
-          errorData.suggestion = 'No account found with this number. Please register first.';
-          errorData.action = 'NAV_REGISTER'; // Action for UI to navigate
-          break;
-        // case AUTH_ERROR_TYPES.OTP_EXPIRED: // Removed
-        case AUTH_ERROR_TYPES.OTP_INVALID:
-          errorData.suggestion = 'Invalid or expired code. Please check the code or request a new one.';
-          errorData.action = 'RETRY_OTP'; // Action for UI to focus OTP input/allow resend
-          break;
-        case AUTH_ERROR_TYPES.INVALID_PHONE:
-          // This case might be less likely here if phone validation happens in sendOTP, but keep for robustness
-          errorData.suggestion = 'The phone number format is invalid. Please correct it (e.g., 07XXXXXXXX).';
-          errorData.action = 'RETRY_PHONE'; // Action for UI to focus phone input
-          break;
-        case AUTH_ERROR_TYPES.VALIDATION_ERROR:
-           // Use the specific message from errorData if available (e.g., joined bulk errors)
-           errorData.suggestion = errorData.message || 'Please correct the highlighted fields and try again.';
-           errorData.action = 'RETRY_FORM'; // Generic form retry action
-           break;
-        case AUTH_ERROR_TYPES.INVALID_MODE: // Added case
-           errorData.suggestion = 'There was an issue processing the request type. Please try again or contact support.';
-           errorData.action = 'RETRY';
-           break;
-        case AUTH_ERROR_TYPES.UNAUTHORIZED:
-        case AUTH_ERROR_TYPES.REVOKED_SESSION:
-        case AUTH_ERROR_TYPES.EXPIRED_SESSION:
-        case AUTH_ERROR_TYPES.INVALID_TOKEN:
-          errorData.suggestion = 'Your session is invalid or expired. Please login again.';
-          errorData.action = 'FORCE_LOGOUT'; // Action for UI to clear state and redirect to login
-          break;
-        case ERROR_TYPES.SERVICE_UNAVAILABLE:
-           errorData.suggestion = 'Could not connect to the server. Please check your connection and try again.';
-           errorData.action = 'RETRY_CONNECTION';
-           break;
-        default: // Includes UNKNOWN_ERROR and any other backend codes not mapped
-          errorData.suggestion = errorData.message || 'An unexpected error occurred. Please try again or contact support.';
-          errorData.action = 'RETRY';
+        case AUTH_ERROR_TYPES.USER_EXISTS: errorData.suggestion = 'This phone number is already registered. Please login instead.'; errorData.action = 'NAV_LOGIN'; break;
+        case AUTH_ERROR_TYPES.NOT_FOUND: errorData.suggestion = 'No account found with this number. Please register first.'; errorData.action = 'NAV_REGISTER'; break;
+        case AUTH_ERROR_TYPES.OTP_INVALID: errorData.suggestion = 'Invalid or expired code. Please check the code or request a new one.'; errorData.action = 'RETRY_OTP'; break;
+        case AUTH_ERROR_TYPES.INVALID_PHONE: errorData.suggestion = 'The phone number format is invalid. Please correct it (e.g., 07XXXXXXXX).'; errorData.action = 'RETRY_PHONE'; break;
+        case AUTH_ERROR_TYPES.VALIDATION_ERROR: errorData.suggestion = errorData.message || 'Please correct the highlighted fields and try again.'; errorData.action = 'RETRY_FORM'; break;
+        case AUTH_ERROR_TYPES.INVALID_MODE: errorData.suggestion = 'There was an issue processing the request type. Please try again or contact support.'; errorData.action = 'RETRY'; break;
+        case AUTH_ERROR_TYPES.UNAUTHORIZED: case AUTH_ERROR_TYPES.REVOKED_SESSION: case AUTH_ERROR_TYPES.EXPIRED_SESSION: case AUTH_ERROR_TYPES.INVALID_TOKEN: errorData.suggestion = 'Your session is invalid or expired. Please login again.'; errorData.action = 'FORCE_LOGOUT'; break;
+        case ERROR_TYPES.SERVICE_UNAVAILABLE: errorData.suggestion = 'Could not connect to the server. Please check your connection and try again.'; errorData.action = 'RETRY_CONNECTION'; break;
+        default: errorData.suggestion = errorData.message || 'An unexpected error occurred. Please try again or contact support.'; errorData.action = 'RETRY';
       }
-
-      // Log the processed error for verifyOTP
-      console.error('Processed Verify OTP/Auth Error (to be stored in state):', JSON.stringify(errorData, null, 2));
-
+      console.error('Processed Verify OTP/Auth Error:', JSON.stringify(errorData, null, 2));
       return rejectWithValue(errorData);
     }
   }
 );
 
-export const performLogout = createAsyncThunk(
+export const performLogout = createAsyncThunk(/* ... as before ... */
   "auth/logout",
   async (_, { getState, rejectWithValue }) => {
-    const { refreshToken } = getState().auth; // Get token before try block
-
-    // If no token, consider already logged out locally
+    const { refreshToken } = getState().auth;
     if (!refreshToken) {
-      console.warn("Logout attempted without refresh token (already logged out locally).");
-      // Resolve successfully as the state is already logged out
+      console.warn("Logout attempted without refresh token.");
       return { success: true, message: "Already logged out.", timestamp: new Date().toISOString() };
     }
-
     try {
       await axiosInstance.post("/auth/logout", { refreshToken });
-      // Success from backend
       return { success: true, message: "Logout successful.", timestamp: new Date().toISOString() };
     } catch (err) {
-       // --- START: Detailed Error Logging for performLogout ---
-       console.error("--- Raw Axios Error in performLogout ---");
-       if (err.response) {
-         console.error("Status:", err.response.status);
-         try {
-             console.error("Data:", JSON.stringify(err.response.data, null, 2));
-         } catch (e) {
-             console.error("Data (non-JSON or failed to stringify):", err.response.data);
-         }
-         console.error("Headers:", JSON.stringify(err.response.headers, null, 2));
-       } else if (err.request) {
-         console.error("No response received. Request details:", err.request);
-       } else {
-         console.error("Error setting up request:", err.message);
-       }
-       console.error("Error Message:", err.message);
-       // --- END: Detailed Error Logging for performLogout ---
-
+       console.error("--- Raw Axios Error in performLogout ---"); // Keep logging
+       if (err.response) { console.error("Status:", err.response.status); try { console.error("Data:", JSON.stringify(err.response.data, null, 2)); } catch (e) { console.error("Data (non-JSON):", err.response.data); } console.error("Headers:", JSON.stringify(err.response.headers, null, 2)); } else if (err.request) { console.error("No response:", err.request); } else { console.error("Setup Error:", err.message); } console.error("Message:", err.message);
       const errorData = extractError(err);
-      // Log the API error, but proceed to reject for local state cleanup
       console.error('Processed Logout API Error:', JSON.stringify(errorData, null, 2));
-      // Reject even on API failure to ensure local state is cleared in the reducer
-      return rejectWithValue(errorData);
+      return rejectWithValue(errorData); // Reject to trigger local cleanup in reducer
     }
   }
 );
 
-// --- Updated Initial State ---
+// --- *** UPDATED Initial State *** ---
 const initialState = {
   user: null,
   balance: null,
+  points: null, // <-- ADDED points state
   accessToken: localStorage.getItem("accessToken"),
   refreshToken: localStorage.getItem("refreshToken"),
   loading: false,
-  error: null, // Stores the object from extractError { message, code, details, severity, timestamp, shouldReport, suggestion?, action? }
+  error: null,
   lastAction: null,
   lastActionTimestamp: null,
-  // Set initial status based on token presence
   authStatus: localStorage.getItem("accessToken") ? 'authenticated' : 'idle',
   retryCount: 0
 };
 
-// --- Updated Slice Reducers & ExtraReducers ---
+// --- *** UPDATED Slice Reducers & ExtraReducers *** ---
 const authSlice = createSlice({
   name: "auth",
   initialState,
@@ -394,132 +212,655 @@ const authSlice = createSlice({
       if (!isNaN(newBalance)) {
           state.balance = newBalance;
           if (state.user) {
-              state.user.balance = newBalance; // Keep user object consistent if exists
+              state.user.balance = newBalance; // Keep user object consistent
           }
       } else {
           console.warn("Invalid payload received for updateBalance:", action.payload);
       }
     },
+    // --- ADDED updatePoints Reducer ---
+    updatePoints(state, action) {
+      const newPoints = parseInt(action.payload, 10); // Ensure it's an integer
+      if (!isNaN(newPoints)) {
+          state.points = newPoints; // Update top-level points state
+          if (state.user) {
+              state.user.points = newPoints; // Keep user object consistent
+          }
+      } else {
+          console.warn("Invalid payload received for updatePoints:", action.payload);
+      }
+    },
     clearError(state) {
       state.error = null;
-      state.retryCount = 0; // Reset retries when error is explicitly cleared
+      state.retryCount = 0;
     },
-    // Manual logout action (optional, if needed for immediate UI changes without API call)
-    // Generally, dispatching performLogout is preferred.
+    // --- UPDATED logout Reducer ---
     logout(state) {
+      // Reset all relevant fields, including points
       state.user = null;
       state.balance = null;
+      state.points = null; // <-- Clear points
       state.accessToken = null;
       state.refreshToken = null;
       state.error = null;
       state.authStatus = 'idle';
-      state.lastAction = 'MANUAL_LOGOUT'; // Indicate manual trigger
+      state.lastAction = 'MANUAL_LOGOUT';
       state.lastActionTimestamp = new Date().toISOString();
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
-      // Optionally clear other user-related persisted data
     },
   },
   extraReducers: (builder) => {
     builder
-      // sendOTP
+      // sendOTP (no changes needed here for points)
       .addCase(sendOTP.pending, (state) => {
-        state.loading = true;
-        state.error = null; // Clear previous errors on new attempt
-        state.lastAction = 'SEND_OTP';
-        state.authStatus = 'pending_otp'; // Specific status
+        state.loading = true; state.error = null; state.lastAction = 'SEND_OTP'; state.authStatus = 'pending_otp';
       })
       .addCase(sendOTP.fulfilled, (state, action) => {
-        state.loading = false;
-        state.lastActionTimestamp = action.payload.timestamp;
-        state.authStatus = 'otp_sent';
-        state.retryCount = 0; // Reset retries on success
-        state.error = null; // Ensure error is cleared on success
+        state.loading = false; state.lastActionTimestamp = action.payload.timestamp; state.authStatus = 'otp_sent'; state.retryCount = 0; state.error = null;
       })
       .addCase(sendOTP.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload; // Stores the structured error object from rejectWithValue
-        state.authStatus = 'failed_otp'; // Specific status
-        state.retryCount += 1;
+        state.loading = false; state.error = action.payload; state.authStatus = 'failed_otp'; state.retryCount += 1;
       })
 
-      // verifyOTP (covers verify + login/register)
+      // --- UPDATED verifyOTP.fulfilled ---
       .addCase(verifyOTP.pending, (state) => {
-        state.loading = true;
-        state.error = null; // Clear previous errors on new attempt
-        state.lastAction = 'VERIFY_OTP_AUTH';
-        state.authStatus = 'pending_auth';
+        state.loading = true; state.error = null; state.lastAction = 'VERIFY_OTP_AUTH'; state.authStatus = 'pending_auth';
       })
       .addCase(verifyOTP.fulfilled, (state, action) => {
         state.loading = false;
         state.user = action.payload.user;
-        state.balance = action.payload.user?.balance ?? null; // Safely access balance
+        // Safely access balance and points from the user object
+        state.balance = action.payload.user?.balance ?? null;
+        state.points = action.payload.user?.points ?? null; // <-- Set points state
         state.accessToken = action.payload.accessToken;
         state.refreshToken = action.payload.refreshToken;
         state.lastActionTimestamp = action.payload.timestamp;
         state.authStatus = 'authenticated';
-        state.retryCount = 0; // Reset retries on success
-        state.error = null; // Clear error on successful authentication
-        // Persist tokens
+        state.retryCount = 0;
+        state.error = null;
         localStorage.setItem("accessToken", action.payload.accessToken);
         localStorage.setItem("refreshToken", action.payload.refreshToken);
       })
       .addCase(verifyOTP.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload; // Stores the structured error object
-        state.authStatus = 'failed_auth';
-        state.retryCount += 1;
-        // Do NOT clear tokens here on failure, allow retry if applicable (e.g., wrong OTP)
-        // If the error action is FORCE_LOGOUT, the component should handle clearing state/redirecting
+        state.loading = false; state.error = action.payload; state.authStatus = 'failed_auth'; state.retryCount += 1;
+        // Don't clear tokens/user data on rejection here, allow retry/error handling
       })
 
-      // performLogout
+      // --- UPDATED performLogout cases ---
       .addCase(performLogout.pending, (state) => {
-        state.loading = true; // Indicate loading state for logout
-        state.error = null;
-        state.lastAction = 'LOGOUT';
-        state.authStatus = 'logging_out';
+        state.loading = true; state.error = null; state.lastAction = 'LOGOUT'; state.authStatus = 'logging_out';
       })
       .addCase(performLogout.fulfilled, (state, action) => {
         state.loading = false;
         state.lastActionTimestamp = action.payload.timestamp;
-        // Clear all auth state on successful logout (API or local)
-        // Reset to initial state but keep authStatus idle and clear tokens explicitly
-        Object.assign(state, initialState, { authStatus: 'idle', accessToken: null, refreshToken: null });
+        // Reset state, ensuring points is cleared
+        Object.assign(state, initialState, { authStatus: 'idle', accessToken: null, refreshToken: null, points: null }); // <-- Ensure points is null
         localStorage.removeItem("accessToken");
         localStorage.removeItem("refreshToken");
       })
       .addCase(performLogout.rejected, (state, action) => {
         state.loading = false;
-        // Store the error, but still clear local state as user intent was logout
-        state.error = action.payload; // Keep the error object from rejectWithValue
-        state.lastActionTimestamp = new Date().toISOString(); // Record timestamp even on failure
-        // Reset to initial state, keep the error, ensure tokens are cleared
-        Object.assign(state, initialState, { authStatus: 'idle', accessToken: null, refreshToken: null, error: action.payload });
+        state.error = action.payload;
+        state.lastActionTimestamp = new Date().toISOString();
+        // Reset state even on API failure, ensuring points is cleared
+        Object.assign(state, initialState, { authStatus: 'idle', accessToken: null, refreshToken: null, points: null, error: action.payload }); // <-- Ensure points is null
         localStorage.removeItem("accessToken");
         localStorage.removeItem("refreshToken");
-        // Log that local state was cleared despite API failure
         console.error("Logout API failed, but local state cleared. Error:", action.payload);
       });
   },
 });
 
-// --- Updated Selectors ---
+// --- *** UPDATED Selectors *** ---
 export const selectAuthLoading     = (state) => state.auth.loading;
-export const selectAuthErrorObject = (state) => state.auth.error; // Get the full error object
+export const selectAuthErrorObject = (state) => state.auth.error;
 export const selectAuthErrorMessage = (state) => state.auth.error?.message || null;
 export const selectAuthErrorCode   = (state) => state.auth.error?.code || null;
-export const selectAuthErrorDetails = (state) => state.auth.error?.details || null; // Selector for details
+export const selectAuthErrorDetails = (state) => state.auth.error?.details || null;
 export const selectAuthErrorSuggestion = (state) => state.auth.error?.suggestion || null;
-export const selectAuthErrorAction = (state) => state.auth.error?.action || null; // Get suggested UI action
+export const selectAuthErrorAction = (state) => state.auth.error?.action || null;
 export const selectAuthStatus      = (state) => state.auth.authStatus;
 export const selectIsAuthenticated = (state) => state.auth.authStatus === 'authenticated' && !!state.auth.accessToken;
 export const selectUser            = (state) => state.auth.user;
 export const selectBalance         = (state) => state.auth.balance;
-export const selectCanRetry        = (state) => state.auth.retryCount < 3; // Example retry limit
+export const selectPoints          = (state) => state.auth.points; // <-- ADDED points selector
+export const selectCanRetry        = (state) => state.auth.retryCount < 3;
 
-export const { updateAccessToken, updateBalance, clearError, logout } = authSlice.actions;
+// --- *** UPDATED Exported Actions *** ---
+export const {
+  updateAccessToken,
+  updateBalance,
+  updatePoints, // <-- Export updatePoints
+  clearError,
+  logout
+} = authSlice.actions;
+
 export default authSlice.reducer;
+
+
+// // authSlice.js
+// import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+// import axiosInstance from "../app/axiosInstance"; // Ensure this path is correct
+// import {
+//   ERROR_TYPES,
+//   ERROR_MESSAGES,
+//   // Assuming these helpers exist and are imported correctly from errorTypes.js
+//   // If not, the extractError function will use defaults.
+//   getErrorSeverity,
+//   shouldReportError
+// } from '../constants/errorTypes'; // Ensure this path is correct
+
+// // --- Updated Error Types ---
+// const AUTH_ERROR_TYPES = {
+//   ...ERROR_TYPES, // Include base error types if defined in errorTypes.js
+//   SEND_OTP_FAILED:   'SEND_OTP_FAILED',   // Keep for now, review usage
+//   VERIFY_OTP_FAILED: 'VERIFY_OTP_FAILED', // Keep for now, review usage
+//   USER_EXISTS:       'USER_EXISTS',
+//   OTP_INVALID:       'OTP_INVALID',
+//   // OTP_EXPIRED:       'OTP_EXPIRED', // REMOVED - Backend sends OTP_INVALID for this
+//   INVALID_PHONE:     'INVALID_PHONE',
+//   VALIDATION_ERROR:  'VALIDATION_ERROR',
+//   NOT_FOUND:         'NOT_FOUND',
+//   UNAUTHORIZED:      'UNAUTHORIZED',
+//   REVOKED_SESSION:   'REVOKED_SESSION',
+//   EXPIRED_SESSION:   'EXPIRED_SESSION',
+//   INVALID_TOKEN:     'INVALID_TOKEN',
+//   INVALID_MODE:      'INVALID_MODE'       // ADDED - For invalid 'mode' in otp/send
+// };
+
+// // --- Updated Error Messages ---
+// const AUTH_ERROR_MESSAGES = {
+//   ...ERROR_MESSAGES, // Include base messages if defined in errorTypes.js
+//   [AUTH_ERROR_TYPES.INVALID_PHONE]: 'Please enter a valid phone number (e.g., 07XXXXXXXX or +254XXXXXXXXX).',
+//   [AUTH_ERROR_TYPES.USER_EXISTS]: 'This phone number is already registered. Please login instead.',
+//   [AUTH_ERROR_TYPES.NOT_FOUND]: 'No account found with this phone number. Please register first.',
+//   [AUTH_ERROR_TYPES.OTP_INVALID]: 'Invalid or expired verification code. Please try again or request a new one.', // Updated message
+//   // [AUTH_ERROR_TYPES.OTP_EXPIRED]: 'Verification code has expired. Please request a new one.', // REMOVED
+//   [AUTH_ERROR_TYPES.VALIDATION_ERROR]: 'Please check your input and try again.', // Generic validation message
+//   [AUTH_ERROR_TYPES.UNAUTHORIZED]: 'Unauthorized access. Please login again.',
+//   [AUTH_ERROR_TYPES.REVOKED_SESSION]: 'Your session has been revoked. Please login again.',
+//   [AUTH_ERROR_TYPES.EXPIRED_SESSION]: 'Your session has expired. Please login again.',
+//   [AUTH_ERROR_TYPES.INVALID_TOKEN]: 'Invalid token. Please login again.',
+//   [AUTH_ERROR_TYPES.SEND_OTP_FAILED]: 'Failed to send verification code. Please try again.', // Keep for now
+//   [AUTH_ERROR_TYPES.VERIFY_OTP_FAILED]: 'Failed to verify code. Please try again.', // Keep for now
+//   [AUTH_ERROR_TYPES.INVALID_MODE]: 'An invalid operation mode was specified. Please contact support.', // ADDED Message
+//   // Add fallbacks from ERROR_TYPES if they exist and are needed
+//   [ERROR_TYPES.SERVICE_UNAVAILABLE]: ERROR_MESSAGES[ERROR_TYPES.SERVICE_UNAVAILABLE] || 'Cannot connect to the server. Please check your internet connection.',
+//   [ERROR_TYPES.UNKNOWN_ERROR]: ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR] || 'An unexpected error occurred. Please try again.'
+// };
+
+// // --- Updated extractError Helper Function ---
+// const extractError = (error) => {
+//   const data = error.response?.data;
+//   const defaultSeverity = 'error';
+//   const defaultShouldReport = true;
+
+//   // Helper to safely get severity
+//   const getSeverity = (code) => {
+//     try {
+//       // Check if getErrorSeverity function exists before calling
+//       return typeof getErrorSeverity === 'function' ? getErrorSeverity(code) : defaultSeverity;
+//     } catch {
+//       return defaultSeverity;
+//     }
+//   };
+
+//   // Helper to safely get reporting status
+//   const getShouldReport = (code) => {
+//     try {
+//       // Check if shouldReportError function exists before calling
+//       return typeof shouldReportError === 'function' ? shouldReportError(code) : defaultShouldReport;
+//     } catch {
+//       return defaultShouldReport;
+//     }
+//   };
+
+//   // 1) Standard APIError structure (root level)
+//   if (data?.code) {
+//     const { code, message, details } = data;
+//     // Prioritize specific message from map, fallback to backend message, then generic unknown error message
+//     const userMessage = AUTH_ERROR_MESSAGES[code] || message || AUTH_ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR];
+
+//     // 1.a) Bulk validation errors (e.g., from express-validator)
+//     if (code === AUTH_ERROR_TYPES.VALIDATION_ERROR && details?.errors && Array.isArray(details.errors)) {
+//       const fieldErrors = details.errors;
+//       // Join specific messages from backend if available
+//       const flatMessage = fieldErrors
+//         .map(e => e.msg || e.message) // Prefer 'msg'
+//         .filter(Boolean)
+//         .join('; ') || AUTH_ERROR_MESSAGES[code]; // Fallback to generic validation message
+
+//       return {
+//         message: flatMessage,
+//         code,
+//         details: fieldErrors, // Keep details for potential inline display
+//         severity: 'warning',
+//         timestamp: new Date().toISOString(),
+//         shouldReport: false // Don't usually report validation errors
+//       };
+//     }
+
+//     // 1.b) Single field validation or other errors with details object
+//     // Check if details exist, is an object, and is not the bulk error case already handled
+//     if (details && typeof details === 'object' && !(code === AUTH_ERROR_TYPES.VALIDATION_ERROR && details?.errors)) {
+//        // If details has its own message (like from APIError.validationError), use it, otherwise use the mapped/backend message
+//        const specificMessage = details.message || userMessage;
+//        return {
+//          message: specificMessage,
+//          code,
+//          details, // Keep the details object
+//          severity: getSeverity(code),
+//          timestamp: new Date().toISOString(),
+//          shouldReport: getShouldReport(code)
+//        };
+//      }
+
+//     // 1.c) All other APIError codes (without specific details structure or handled above)
+//     return {
+//       message: userMessage, // Use the mapped message or fallback
+//       code,
+//       details: details || null, // Ensure details is null if not present/relevant
+//       severity: getSeverity(code),
+//       timestamp: new Date().toISOString(),
+//       shouldReport: getShouldReport(code)
+//     };
+//   }
+
+//   // 2) Legacy shape under data.error (Simplified handling)
+//   if (data?.error?.code) {
+//      const { code, message, details } = data.error;
+//      // Prioritize specific message from map, fallback to backend message, then generic unknown error message
+//      const userMessage = AUTH_ERROR_MESSAGES[code] || message || AUTH_ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR];
+//      // Basic handling, similar to 1.c but using data.error properties
+//      return {
+//        message: userMessage,
+//        code,
+//        details: details || null,
+//        severity: getSeverity(code),
+//        timestamp: new Date().toISOString(),
+//        shouldReport: getShouldReport(code)
+//      };
+//   }
+
+//   // 3) Network errors (Axios specific: no response or explicit message)
+//   if (error.message === 'Network Error' || !error.response) {
+//     return {
+//       message: AUTH_ERROR_MESSAGES[ERROR_TYPES.SERVICE_UNAVAILABLE],
+//       code: ERROR_TYPES.SERVICE_UNAVAILABLE,
+//       details: null,
+//       severity: 'error',
+//       timestamp: new Date().toISOString(),
+//       shouldReport: true // Network errors should usually be reported
+//     };
+//   }
+
+//   // 4) Fallback for other unexpected JS errors or unknown structures
+//   console.error("Unknown error structure encountered in extractError:", error); // Log the raw error
+//   return {
+//     message: AUTH_ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR], // Fallback message
+//     code: ERROR_TYPES.UNKNOWN_ERROR, // Fallback code
+//     details: { rawError: error.message }, // Include raw message in details for context
+//     severity: 'error',
+//     timestamp: new Date().toISOString(),
+//     shouldReport: true // Report unknown errors
+//   };
+// };
+
+
+// // --- Updated Thunks ---
+
+// export const sendOTP = createAsyncThunk(
+//   "auth/sendOTP",
+//   async ({ phone, mode }, { rejectWithValue }) => {
+//     try {
+//       const response = await axiosInstance.post("/otp/send", { phone, mode });
+//       // Assuming backend sends { message, expiresIn } on success
+//       return {
+//         message: response.data?.message || 'OTP sent successfully.', // Use backend message or default
+//         expiresIn: response.data?.expiresIn,
+//         timestamp: new Date().toISOString()
+//       };
+//     } catch (err) {
+//       // --- START: Detailed Error Logging ---
+//       console.error("--- Raw Axios Error in sendOTP ---");
+//       if (err.response) {
+//         // Log details if the server responded
+//         console.error("Status:", err.response.status);
+//         // Use try-catch for JSON.stringify in case data is not valid JSON
+//         try {
+//             console.error("Data:", JSON.stringify(err.response.data, null, 2));
+//         } catch (e) {
+//             console.error("Data (non-JSON or failed to stringify):", err.response.data);
+//         }
+//         console.error("Headers:", JSON.stringify(err.response.headers, null, 2));
+//       } else if (err.request) {
+//         // Log details if the request was made but no response received
+//         console.error("No response received. Request details:", err.request);
+//       } else {
+//         // Log details if there was an error setting up the request
+//         console.error("Error setting up request:", err.message);
+//       }
+//       console.error("Error Message:", err.message); // Log the basic error message
+//       // --- END: Detailed Error Logging ---
+
+//       // Process the error AFTER logging its raw form
+//       const errorData = extractError(err);
+
+//       // Log the processed error structure that will be stored in Redux state
+//       console.error('Processed Error Data (to be stored in state):', JSON.stringify(errorData, null, 2));
+
+//       return rejectWithValue(errorData); // Pass the structured error object to the reducer
+//     }
+//   }
+// );
+
+// export const verifyOTP = createAsyncThunk(
+//   "auth/verifyOTP",
+//   async ({ phone, code, mode }, { rejectWithValue }) => {
+//     try {
+//       // Step 1: Verify OTP
+//       await axiosInstance.post("/otp/verify", { phone, code });
+//       // If verify fails, backend throws OTP_INVALID (as per current code)
+
+//       // Step 2: Proceed to Login or Register
+//       const endpoint = mode === "register" ? "/auth/register" : "/auth/login";
+//       const response = await axiosInstance.post(endpoint, { phone, code }); // Send code again
+
+//       // Validate response structure
+//       if (!response.data?.data?.user || !response.data?.data?.tokens) {
+//           console.error("Invalid response structure from auth endpoint:", response.data);
+//           // Throw an error that extractError can hopefully parse, or create a specific one
+//           const err = new Error('Received invalid data after authentication.');
+//           err.response = { data: { code: ERROR_TYPES.UNKNOWN_ERROR, message: err.message } }; // Simulate APIError structure
+//           throw err;
+//       }
+//       const { user, tokens } = response.data.data;
+
+//       return {
+//         user,
+//         accessToken: tokens.accessToken,
+//         refreshToken: tokens.refreshToken,
+//         timestamp: new Date().toISOString()
+//       };
+//     } catch (err) {
+//        // --- START: Detailed Error Logging for verifyOTP ---
+//        console.error("--- Raw Axios Error in verifyOTP ---");
+//        if (err.response) {
+//          console.error("Status:", err.response.status);
+//          try {
+//              console.error("Data:", JSON.stringify(err.response.data, null, 2));
+//          } catch (e) {
+//              console.error("Data (non-JSON or failed to stringify):", err.response.data);
+//          }
+//          console.error("Headers:", JSON.stringify(err.response.headers, null, 2));
+//        } else if (err.request) {
+//          console.error("No response received. Request details:", err.request);
+//        } else {
+//          console.error("Error setting up request:", err.message);
+//        }
+//        console.error("Error Message:", err.message);
+//        // --- END: Detailed Error Logging for verifyOTP ---
+
+//       const errorData = extractError(err);
+
+//       // --- Updated Suggestions Logic ---
+//       switch (errorData.code) {
+//         case AUTH_ERROR_TYPES.USER_EXISTS:
+//           errorData.suggestion = 'This phone number is already registered. Please login instead.';
+//           errorData.action = 'NAV_LOGIN'; // Action for UI to navigate
+//           break;
+//         case AUTH_ERROR_TYPES.NOT_FOUND:
+//           errorData.suggestion = 'No account found with this number. Please register first.';
+//           errorData.action = 'NAV_REGISTER'; // Action for UI to navigate
+//           break;
+//         // case AUTH_ERROR_TYPES.OTP_EXPIRED: // Removed
+//         case AUTH_ERROR_TYPES.OTP_INVALID:
+//           errorData.suggestion = 'Invalid or expired code. Please check the code or request a new one.';
+//           errorData.action = 'RETRY_OTP'; // Action for UI to focus OTP input/allow resend
+//           break;
+//         case AUTH_ERROR_TYPES.INVALID_PHONE:
+//           // This case might be less likely here if phone validation happens in sendOTP, but keep for robustness
+//           errorData.suggestion = 'The phone number format is invalid. Please correct it (e.g., 07XXXXXXXX).';
+//           errorData.action = 'RETRY_PHONE'; // Action for UI to focus phone input
+//           break;
+//         case AUTH_ERROR_TYPES.VALIDATION_ERROR:
+//            // Use the specific message from errorData if available (e.g., joined bulk errors)
+//            errorData.suggestion = errorData.message || 'Please correct the highlighted fields and try again.';
+//            errorData.action = 'RETRY_FORM'; // Generic form retry action
+//            break;
+//         case AUTH_ERROR_TYPES.INVALID_MODE: // Added case
+//            errorData.suggestion = 'There was an issue processing the request type. Please try again or contact support.';
+//            errorData.action = 'RETRY';
+//            break;
+//         case AUTH_ERROR_TYPES.UNAUTHORIZED:
+//         case AUTH_ERROR_TYPES.REVOKED_SESSION:
+//         case AUTH_ERROR_TYPES.EXPIRED_SESSION:
+//         case AUTH_ERROR_TYPES.INVALID_TOKEN:
+//           errorData.suggestion = 'Your session is invalid or expired. Please login again.';
+//           errorData.action = 'FORCE_LOGOUT'; // Action for UI to clear state and redirect to login
+//           break;
+//         case ERROR_TYPES.SERVICE_UNAVAILABLE:
+//            errorData.suggestion = 'Could not connect to the server. Please check your connection and try again.';
+//            errorData.action = 'RETRY_CONNECTION';
+//            break;
+//         default: // Includes UNKNOWN_ERROR and any other backend codes not mapped
+//           errorData.suggestion = errorData.message || 'An unexpected error occurred. Please try again or contact support.';
+//           errorData.action = 'RETRY';
+//       }
+
+//       // Log the processed error for verifyOTP
+//       console.error('Processed Verify OTP/Auth Error (to be stored in state):', JSON.stringify(errorData, null, 2));
+
+//       return rejectWithValue(errorData);
+//     }
+//   }
+// );
+
+// export const performLogout = createAsyncThunk(
+//   "auth/logout",
+//   async (_, { getState, rejectWithValue }) => {
+//     const { refreshToken } = getState().auth; // Get token before try block
+
+//     // If no token, consider already logged out locally
+//     if (!refreshToken) {
+//       console.warn("Logout attempted without refresh token (already logged out locally).");
+//       // Resolve successfully as the state is already logged out
+//       return { success: true, message: "Already logged out.", timestamp: new Date().toISOString() };
+//     }
+
+//     try {
+//       await axiosInstance.post("/auth/logout", { refreshToken });
+//       // Success from backend
+//       return { success: true, message: "Logout successful.", timestamp: new Date().toISOString() };
+//     } catch (err) {
+//        // --- START: Detailed Error Logging for performLogout ---
+//        console.error("--- Raw Axios Error in performLogout ---");
+//        if (err.response) {
+//          console.error("Status:", err.response.status);
+//          try {
+//              console.error("Data:", JSON.stringify(err.response.data, null, 2));
+//          } catch (e) {
+//              console.error("Data (non-JSON or failed to stringify):", err.response.data);
+//          }
+//          console.error("Headers:", JSON.stringify(err.response.headers, null, 2));
+//        } else if (err.request) {
+//          console.error("No response received. Request details:", err.request);
+//        } else {
+//          console.error("Error setting up request:", err.message);
+//        }
+//        console.error("Error Message:", err.message);
+//        // --- END: Detailed Error Logging for performLogout ---
+
+//       const errorData = extractError(err);
+//       // Log the API error, but proceed to reject for local state cleanup
+//       console.error('Processed Logout API Error:', JSON.stringify(errorData, null, 2));
+//       // Reject even on API failure to ensure local state is cleared in the reducer
+//       return rejectWithValue(errorData);
+//     }
+//   }
+// );
+
+// // --- Updated Initial State ---
+// const initialState = {
+//   user: null,
+//   balance: null,
+//   accessToken: localStorage.getItem("accessToken"),
+//   refreshToken: localStorage.getItem("refreshToken"),
+//   loading: false,
+//   error: null, // Stores the object from extractError { message, code, details, severity, timestamp, shouldReport, suggestion?, action? }
+//   lastAction: null,
+//   lastActionTimestamp: null,
+//   // Set initial status based on token presence
+//   authStatus: localStorage.getItem("accessToken") ? 'authenticated' : 'idle',
+//   retryCount: 0
+// };
+
+// // --- Updated Slice Reducers & ExtraReducers ---
+// const authSlice = createSlice({
+//   name: "auth",
+//   initialState,
+//   reducers: {
+//     updateAccessToken(state, action) {
+//       if (action.payload) {
+//         state.accessToken = action.payload;
+//         localStorage.setItem("accessToken", action.payload);
+//       } else {
+//         state.accessToken = null;
+//         localStorage.removeItem("accessToken");
+//       }
+//     },
+//     updateBalance(state, action) {
+//       const newBalance = parseFloat(action.payload);
+//       if (!isNaN(newBalance)) {
+//           state.balance = newBalance;
+//           if (state.user) {
+//               state.user.balance = newBalance; // Keep user object consistent if exists
+//           }
+//       } else {
+//           console.warn("Invalid payload received for updateBalance:", action.payload);
+//       }
+//     },
+//     clearError(state) {
+//       state.error = null;
+//       state.retryCount = 0; // Reset retries when error is explicitly cleared
+//     },
+//     // Manual logout action (optional, if needed for immediate UI changes without API call)
+//     // Generally, dispatching performLogout is preferred.
+//     logout(state) {
+//       state.user = null;
+//       state.balance = null;
+//       state.accessToken = null;
+//       state.refreshToken = null;
+//       state.error = null;
+//       state.authStatus = 'idle';
+//       state.lastAction = 'MANUAL_LOGOUT'; // Indicate manual trigger
+//       state.lastActionTimestamp = new Date().toISOString();
+//       localStorage.removeItem("accessToken");
+//       localStorage.removeItem("refreshToken");
+//       // Optionally clear other user-related persisted data
+//     },
+//   },
+//   extraReducers: (builder) => {
+//     builder
+//       // sendOTP
+//       .addCase(sendOTP.pending, (state) => {
+//         state.loading = true;
+//         state.error = null; // Clear previous errors on new attempt
+//         state.lastAction = 'SEND_OTP';
+//         state.authStatus = 'pending_otp'; // Specific status
+//       })
+//       .addCase(sendOTP.fulfilled, (state, action) => {
+//         state.loading = false;
+//         state.lastActionTimestamp = action.payload.timestamp;
+//         state.authStatus = 'otp_sent';
+//         state.retryCount = 0; // Reset retries on success
+//         state.error = null; // Ensure error is cleared on success
+//       })
+//       .addCase(sendOTP.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload; // Stores the structured error object from rejectWithValue
+//         state.authStatus = 'failed_otp'; // Specific status
+//         state.retryCount += 1;
+//       })
+
+//       // verifyOTP (covers verify + login/register)
+//       .addCase(verifyOTP.pending, (state) => {
+//         state.loading = true;
+//         state.error = null; // Clear previous errors on new attempt
+//         state.lastAction = 'VERIFY_OTP_AUTH';
+//         state.authStatus = 'pending_auth';
+//       })
+//       .addCase(verifyOTP.fulfilled, (state, action) => {
+//         state.loading = false;
+//         state.user = action.payload.user;
+//         state.balance = action.payload.user?.balance ?? null; // Safely access balance
+//         state.accessToken = action.payload.accessToken;
+//         state.refreshToken = action.payload.refreshToken;
+//         state.lastActionTimestamp = action.payload.timestamp;
+//         state.authStatus = 'authenticated';
+//         state.retryCount = 0; // Reset retries on success
+//         state.error = null; // Clear error on successful authentication
+//         // Persist tokens
+//         localStorage.setItem("accessToken", action.payload.accessToken);
+//         localStorage.setItem("refreshToken", action.payload.refreshToken);
+//       })
+//       .addCase(verifyOTP.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload; // Stores the structured error object
+//         state.authStatus = 'failed_auth';
+//         state.retryCount += 1;
+//         // Do NOT clear tokens here on failure, allow retry if applicable (e.g., wrong OTP)
+//         // If the error action is FORCE_LOGOUT, the component should handle clearing state/redirecting
+//       })
+
+//       // performLogout
+//       .addCase(performLogout.pending, (state) => {
+//         state.loading = true; // Indicate loading state for logout
+//         state.error = null;
+//         state.lastAction = 'LOGOUT';
+//         state.authStatus = 'logging_out';
+//       })
+//       .addCase(performLogout.fulfilled, (state, action) => {
+//         state.loading = false;
+//         state.lastActionTimestamp = action.payload.timestamp;
+//         // Clear all auth state on successful logout (API or local)
+//         // Reset to initial state but keep authStatus idle and clear tokens explicitly
+//         Object.assign(state, initialState, { authStatus: 'idle', accessToken: null, refreshToken: null });
+//         localStorage.removeItem("accessToken");
+//         localStorage.removeItem("refreshToken");
+//       })
+//       .addCase(performLogout.rejected, (state, action) => {
+//         state.loading = false;
+//         // Store the error, but still clear local state as user intent was logout
+//         state.error = action.payload; // Keep the error object from rejectWithValue
+//         state.lastActionTimestamp = new Date().toISOString(); // Record timestamp even on failure
+//         // Reset to initial state, keep the error, ensure tokens are cleared
+//         Object.assign(state, initialState, { authStatus: 'idle', accessToken: null, refreshToken: null, error: action.payload });
+//         localStorage.removeItem("accessToken");
+//         localStorage.removeItem("refreshToken");
+//         // Log that local state was cleared despite API failure
+//         console.error("Logout API failed, but local state cleared. Error:", action.payload);
+//       });
+//   },
+// });
+
+// // --- Updated Selectors ---
+// export const selectAuthLoading     = (state) => state.auth.loading;
+// export const selectAuthErrorObject = (state) => state.auth.error; // Get the full error object
+// export const selectAuthErrorMessage = (state) => state.auth.error?.message || null;
+// export const selectAuthErrorCode   = (state) => state.auth.error?.code || null;
+// export const selectAuthErrorDetails = (state) => state.auth.error?.details || null; // Selector for details
+// export const selectAuthErrorSuggestion = (state) => state.auth.error?.suggestion || null;
+// export const selectAuthErrorAction = (state) => state.auth.error?.action || null; // Get suggested UI action
+// export const selectAuthStatus      = (state) => state.auth.authStatus;
+// export const selectIsAuthenticated = (state) => state.auth.authStatus === 'authenticated' && !!state.auth.accessToken;
+// export const selectUser            = (state) => state.auth.user;
+// export const selectBalance         = (state) => state.auth.balance;
+// export const selectCanRetry        = (state) => state.auth.retryCount < 3; // Example retry limit
+
+// export const { updateAccessToken, updateBalance, clearError, logout } = authSlice.actions;
+// export default authSlice.reducer;
 
 
 // import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
