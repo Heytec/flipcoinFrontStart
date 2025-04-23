@@ -10,7 +10,6 @@ import {
 
 // --- Error Types and Messages (remain the same) ---
 const AUTH_ERROR_TYPES = {
-  // ... (keep existing error types)
   SEND_OTP_FAILED:   'SEND_OTP_FAILED',
   VERIFY_OTP_FAILED: 'VERIFY_OTP_FAILED',
   USER_EXISTS:       'USER_EXISTS',
@@ -26,7 +25,6 @@ const AUTH_ERROR_TYPES = {
 };
 
 const AUTH_ERROR_MESSAGES = {
-  // ... (keep existing error messages)
   [AUTH_ERROR_TYPES.INVALID_PHONE]: 'Please enter a valid phone number (e.g., 07XXXXXXXX or +254XXXXXXXXX).',
   [AUTH_ERROR_TYPES.USER_EXISTS]: 'This phone number is already registered. Please login instead.',
   [AUTH_ERROR_TYPES.NOT_FOUND]: 'No account found with this phone number. Please register first.',
@@ -91,9 +89,9 @@ const extractError = (error) => {
 };
 
 
-// --- Thunks (sendOTP, verifyOTP, performLogout - remain the same, including logging and error suggestions) ---
+// --- Thunks (sendOTP, verifyOTP, performLogout - remain the same) ---
 
-export const sendOTP = createAsyncThunk(/* ... as before ... */
+export const sendOTP = createAsyncThunk(
   "auth/sendOTP",
   async ({ phone, mode }, { rejectWithValue }) => {
     try {
@@ -104,7 +102,7 @@ export const sendOTP = createAsyncThunk(/* ... as before ... */
         timestamp: new Date().toISOString()
       };
     } catch (err) {
-      console.error("--- Raw Axios Error in sendOTP ---"); // Keep logging
+      console.error("--- Raw Axios Error in sendOTP ---");
       if (err.response) { console.error("Status:", err.response.status); try { console.error("Data:", JSON.stringify(err.response.data, null, 2)); } catch (e) { console.error("Data (non-JSON):", err.response.data); } console.error("Headers:", JSON.stringify(err.response.headers, null, 2)); } else if (err.request) { console.error("No response:", err.request); } else { console.error("Setup Error:", err.message); } console.error("Message:", err.message);
       const errorData = extractError(err);
       console.error('Processed Error Data (sendOTP):', JSON.stringify(errorData, null, 2));
@@ -113,7 +111,7 @@ export const sendOTP = createAsyncThunk(/* ... as before ... */
   }
 );
 
-export const verifyOTP = createAsyncThunk(/* ... as before ... */
+export const verifyOTP = createAsyncThunk(
   "auth/verifyOTP",
   async ({ phone, code, mode }, { rejectWithValue }) => {
     try {
@@ -136,10 +134,10 @@ export const verifyOTP = createAsyncThunk(/* ... as before ... */
         timestamp: new Date().toISOString()
       };
     } catch (err) {
-       console.error("--- Raw Axios Error in verifyOTP ---"); // Keep logging
+       console.error("--- Raw Axios Error in verifyOTP ---");
        if (err.response) { console.error("Status:", err.response.status); try { console.error("Data:", JSON.stringify(err.response.data, null, 2)); } catch (e) { console.error("Data (non-JSON):", err.response.data); } console.error("Headers:", JSON.stringify(err.response.headers, null, 2)); } else if (err.request) { console.error("No response:", err.request); } else { console.error("Setup Error:", err.message); } console.error("Message:", err.message);
       const errorData = extractError(err);
-      // Add suggestions based on error code (keep this logic)
+      // Add suggestions based on error code
       switch (errorData.code) {
         case AUTH_ERROR_TYPES.USER_EXISTS: errorData.suggestion = 'This phone number is already registered. Please login instead.'; errorData.action = 'NAV_LOGIN'; break;
         case AUTH_ERROR_TYPES.NOT_FOUND: errorData.suggestion = 'No account found with this number. Please register first.'; errorData.action = 'NAV_REGISTER'; break;
@@ -157,7 +155,7 @@ export const verifyOTP = createAsyncThunk(/* ... as before ... */
   }
 );
 
-export const performLogout = createAsyncThunk(/* ... as before ... */
+export const performLogout = createAsyncThunk(
   "auth/logout",
   async (_, { getState, rejectWithValue }) => {
     const { refreshToken } = getState().auth;
@@ -169,7 +167,7 @@ export const performLogout = createAsyncThunk(/* ... as before ... */
       await axiosInstance.post("/auth/logout", { refreshToken });
       return { success: true, message: "Logout successful.", timestamp: new Date().toISOString() };
     } catch (err) {
-       console.error("--- Raw Axios Error in performLogout ---"); // Keep logging
+       console.error("--- Raw Axios Error in performLogout ---");
        if (err.response) { console.error("Status:", err.response.status); try { console.error("Data:", JSON.stringify(err.response.data, null, 2)); } catch (e) { console.error("Data (non-JSON):", err.response.data); } console.error("Headers:", JSON.stringify(err.response.headers, null, 2)); } else if (err.request) { console.error("No response:", err.request); } else { console.error("Setup Error:", err.message); } console.error("Message:", err.message);
       const errorData = extractError(err);
       console.error('Processed Logout API Error:', JSON.stringify(errorData, null, 2));
@@ -178,20 +176,53 @@ export const performLogout = createAsyncThunk(/* ... as before ... */
   }
 );
 
-// --- *** UPDATED Initial State *** ---
+// --- *** ADDED Helper function to load from localStorage *** ---
+const loadFromLocalStorage = (key) => {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : null;
+  } catch (error) {
+    console.error(`Error parsing localStorage key "${key}":`, error);
+    localStorage.removeItem(key); // Clear invalid item
+    return null;
+  }
+};
+
+// --- *** UPDATED Initial State to load persisted data *** ---
+const persistedUser = loadFromLocalStorage("authUser");
+const persistedAccessToken = localStorage.getItem("accessToken");
+const persistedRefreshToken = localStorage.getItem("refreshToken");
+
 const initialState = {
-  user: null,
-  balance: null,
-  points: null, // <-- ADDED points state
-  accessToken: localStorage.getItem("accessToken"),
-  refreshToken: localStorage.getItem("refreshToken"),
+  user: persistedUser, // <-- Load user from localStorage
+  balance: persistedUser?.balance ?? null, // <-- Derive balance from persisted user
+  points: persistedUser?.points ?? null,   // <-- Derive points from persisted user
+  accessToken: persistedAccessToken,
+  refreshToken: persistedRefreshToken,
   loading: false,
   error: null,
   lastAction: null,
   lastActionTimestamp: null,
-  authStatus: localStorage.getItem("accessToken") ? 'authenticated' : 'idle',
+  // Auth status logic remains the same, based on token presence
+  authStatus: persistedAccessToken ? 'authenticated' : 'idle',
   retryCount: 0
 };
+
+// --- Base initial state structure (used for resetting on logout) ---
+const baseInitialState = {
+    user: null,
+    balance: null,
+    points: null,
+    accessToken: null,
+    refreshToken: null,
+    loading: false,
+    error: null,
+    lastAction: null,
+    lastActionTimestamp: null,
+    authStatus: 'idle',
+    retryCount: 0
+};
+
 
 // --- *** UPDATED Slice Reducers & ExtraReducers *** ---
 const authSlice = createSlice({
@@ -207,24 +238,39 @@ const authSlice = createSlice({
         localStorage.removeItem("accessToken");
       }
     },
+    // --- UPDATED updateBalance Reducer ---
     updateBalance(state, action) {
       const newBalance = parseFloat(action.payload);
       if (!isNaN(newBalance)) {
           state.balance = newBalance;
           if (state.user) {
               state.user.balance = newBalance; // Keep user object consistent
+              // --- UPDATE LOCALSTORAGE ---
+              try {
+                  localStorage.setItem("authUser", JSON.stringify(state.user));
+              } catch (error) {
+                  console.error("Failed to update user balance in localStorage:", error);
+              }
+              // --- END UPDATE ---
           }
       } else {
           console.warn("Invalid payload received for updateBalance:", action.payload);
       }
     },
-    // --- ADDED updatePoints Reducer ---
+    // --- UPDATED updatePoints Reducer ---
     updatePoints(state, action) {
       const newPoints = parseInt(action.payload, 10); // Ensure it's an integer
       if (!isNaN(newPoints)) {
           state.points = newPoints; // Update top-level points state
           if (state.user) {
               state.user.points = newPoints; // Keep user object consistent
+              // --- UPDATE LOCALSTORAGE ---
+              try {
+                  localStorage.setItem("authUser", JSON.stringify(state.user));
+              } catch (error) {
+                  console.error("Failed to update user points in localStorage:", error);
+              }
+              // --- END UPDATE ---
           }
       } else {
           console.warn("Invalid payload received for updatePoints:", action.payload);
@@ -236,23 +282,21 @@ const authSlice = createSlice({
     },
     // --- UPDATED logout Reducer ---
     logout(state) {
-      // Reset all relevant fields, including points
-      state.user = null;
-      state.balance = null;
-      state.points = null; // <-- Clear points
-      state.accessToken = null;
-      state.refreshToken = null;
-      state.error = null;
-      state.authStatus = 'idle';
-      state.lastAction = 'MANUAL_LOGOUT';
-      state.lastActionTimestamp = new Date().toISOString();
+      // Reset all relevant fields using the base structure
+      Object.assign(state, baseInitialState, {
+          lastAction: 'MANUAL_LOGOUT',
+          lastActionTimestamp: new Date().toISOString()
+      });
+      // --- CLEAR LOCALSTORAGE ---
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
+      localStorage.removeItem("authUser"); // <-- Clear user data
+      // --- END CLEAR ---
     },
   },
   extraReducers: (builder) => {
     builder
-      // sendOTP (no changes needed here for points)
+      // sendOTP (no changes needed here)
       .addCase(sendOTP.pending, (state) => {
         state.loading = true; state.error = null; state.lastAction = 'SEND_OTP'; state.authStatus = 'pending_otp';
       })
@@ -270,21 +314,32 @@ const authSlice = createSlice({
       .addCase(verifyOTP.fulfilled, (state, action) => {
         state.loading = false;
         state.user = action.payload.user;
-        // Safely access balance and points from the user object
         state.balance = action.payload.user?.balance ?? null;
-        state.points = action.payload.user?.points ?? null; // <-- Set points state
+        state.points = action.payload.user?.points ?? null;
         state.accessToken = action.payload.accessToken;
         state.refreshToken = action.payload.refreshToken;
         state.lastActionTimestamp = action.payload.timestamp;
         state.authStatus = 'authenticated';
         state.retryCount = 0;
         state.error = null;
+
+        // --- SAVE TO LOCALSTORAGE ---
         localStorage.setItem("accessToken", action.payload.accessToken);
         localStorage.setItem("refreshToken", action.payload.refreshToken);
+        if (action.payload.user) {
+            try {
+                localStorage.setItem("authUser", JSON.stringify(action.payload.user));
+            } catch (error) {
+                console.error("Failed to save user data to localStorage:", error);
+            }
+        } else {
+            localStorage.removeItem("authUser"); // Remove if user is null
+        }
+        // --- END SAVE ---
       })
       .addCase(verifyOTP.rejected, (state, action) => {
         state.loading = false; state.error = action.payload; state.authStatus = 'failed_auth'; state.retryCount += 1;
-        // Don't clear tokens/user data on rejection here, allow retry/error handling
+        // Don't clear tokens/user data on rejection here
       })
 
       // --- UPDATED performLogout cases ---
@@ -293,26 +348,36 @@ const authSlice = createSlice({
       })
       .addCase(performLogout.fulfilled, (state, action) => {
         state.loading = false;
-        state.lastActionTimestamp = action.payload.timestamp;
-        // Reset state, ensuring points is cleared
-        Object.assign(state, initialState, { authStatus: 'idle', accessToken: null, refreshToken: null, points: null }); // <-- Ensure points is null
+        // Reset state using base structure
+        Object.assign(state, baseInitialState, {
+            lastActionTimestamp: action.payload.timestamp,
+            lastAction: 'LOGOUT_SUCCESS'
+        });
+        // --- CLEAR LOCALSTORAGE ---
         localStorage.removeItem("accessToken");
         localStorage.removeItem("refreshToken");
+        localStorage.removeItem("authUser"); // <-- Clear user data
+        // --- END CLEAR ---
       })
       .addCase(performLogout.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload;
-        state.lastActionTimestamp = new Date().toISOString();
-        // Reset state even on API failure, ensuring points is cleared
-        Object.assign(state, initialState, { authStatus: 'idle', accessToken: null, refreshToken: null, points: null, error: action.payload }); // <-- Ensure points is null
+        // Reset state even on API failure, keeping the error
+        Object.assign(state, baseInitialState, {
+            error: action.payload,
+            lastActionTimestamp: new Date().toISOString(),
+            lastAction: 'LOGOUT_FAILED'
+        });
+        // --- CLEAR LOCALSTORAGE ---
         localStorage.removeItem("accessToken");
         localStorage.removeItem("refreshToken");
+        localStorage.removeItem("authUser"); // <-- Clear user data
+        // --- END CLEAR ---
         console.error("Logout API failed, but local state cleared. Error:", action.payload);
       });
   },
 });
 
-// --- *** UPDATED Selectors *** ---
+// --- *** UPDATED Selectors (remain the same functionally) *** ---
 export const selectAuthLoading     = (state) => state.auth.loading;
 export const selectAuthErrorObject = (state) => state.auth.error;
 export const selectAuthErrorMessage = (state) => state.auth.error?.message || null;
@@ -324,19 +389,359 @@ export const selectAuthStatus      = (state) => state.auth.authStatus;
 export const selectIsAuthenticated = (state) => state.auth.authStatus === 'authenticated' && !!state.auth.accessToken;
 export const selectUser            = (state) => state.auth.user;
 export const selectBalance         = (state) => state.auth.balance;
-export const selectPoints          = (state) => state.auth.points; // <-- ADDED points selector
+export const selectPoints          = (state) => state.auth.points;
 export const selectCanRetry        = (state) => state.auth.retryCount < 3;
 
-// --- *** UPDATED Exported Actions *** ---
+// --- *** UPDATED Exported Actions (remain the same functionally) *** ---
 export const {
   updateAccessToken,
   updateBalance,
-  updatePoints, // <-- Export updatePoints
+  updatePoints,
   clearError,
   logout
 } = authSlice.actions;
 
 export default authSlice.reducer;
+
+// // authSlice.js
+// import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+// import axiosInstance from "../app/axiosInstance"; // Ensure this path is correct
+// import {
+//   ERROR_TYPES,
+//   ERROR_MESSAGES,
+//   getErrorSeverity,
+//   shouldReportError
+// } from '../constants/errorTypes'; // Ensure this path is correct
+
+// // --- Error Types and Messages (remain the same) ---
+// const AUTH_ERROR_TYPES = {
+//   // ... (keep existing error types)
+//   SEND_OTP_FAILED:   'SEND_OTP_FAILED',
+//   VERIFY_OTP_FAILED: 'VERIFY_OTP_FAILED',
+//   USER_EXISTS:       'USER_EXISTS',
+//   OTP_INVALID:       'OTP_INVALID',
+//   INVALID_PHONE:     'INVALID_PHONE',
+//   VALIDATION_ERROR:  'VALIDATION_ERROR',
+//   NOT_FOUND:         'NOT_FOUND',
+//   UNAUTHORIZED:      'UNAUTHORIZED',
+//   REVOKED_SESSION:   'REVOKED_SESSION',
+//   EXPIRED_SESSION:   'EXPIRED_SESSION',
+//   INVALID_TOKEN:     'INVALID_TOKEN',
+//   INVALID_MODE:      'INVALID_MODE'
+// };
+
+// const AUTH_ERROR_MESSAGES = {
+//   // ... (keep existing error messages)
+//   [AUTH_ERROR_TYPES.INVALID_PHONE]: 'Please enter a valid phone number (e.g., 07XXXXXXXX or +254XXXXXXXXX).',
+//   [AUTH_ERROR_TYPES.USER_EXISTS]: 'This phone number is already registered. Please login instead.',
+//   [AUTH_ERROR_TYPES.NOT_FOUND]: 'No account found with this phone number. Please register first.',
+//   [AUTH_ERROR_TYPES.OTP_INVALID]: 'Invalid or expired verification code. Please try again or request a new one.',
+//   [AUTH_ERROR_TYPES.VALIDATION_ERROR]: 'Please check your input and try again.',
+//   [AUTH_ERROR_TYPES.UNAUTHORIZED]: 'Unauthorized access. Please login again.',
+//   [AUTH_ERROR_TYPES.REVOKED_SESSION]: 'Your session has been revoked. Please login again.',
+//   [AUTH_ERROR_TYPES.EXPIRED_SESSION]: 'Your session has expired. Please login again.',
+//   [AUTH_ERROR_TYPES.INVALID_TOKEN]: 'Invalid token. Please login again.',
+//   [AUTH_ERROR_TYPES.SEND_OTP_FAILED]: 'Failed to send verification code. Please try again.',
+//   [AUTH_ERROR_TYPES.VERIFY_OTP_FAILED]: 'Failed to verify code. Please try again.',
+//   [AUTH_ERROR_TYPES.INVALID_MODE]: 'An invalid operation mode was specified. Please contact support.',
+//   [ERROR_TYPES.SERVICE_UNAVAILABLE]: ERROR_MESSAGES[ERROR_TYPES.SERVICE_UNAVAILABLE] || 'Cannot connect to the server. Please check your internet connection.',
+//   [ERROR_TYPES.UNKNOWN_ERROR]: ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR] || 'An unexpected error occurred. Please try again.'
+// };
+
+// // --- extractError Helper Function (remains the same) ---
+// const extractError = (error) => {
+//   const data = error.response?.data;
+//   const defaultSeverity = 'error';
+//   const defaultShouldReport = true;
+
+//   const getSeverity = (code) => {
+//     try {
+//       return typeof getErrorSeverity === 'function' ? getErrorSeverity(code) : defaultSeverity;
+//     } catch { return defaultSeverity; }
+//   };
+//   const getShouldReport = (code) => {
+//     try {
+//       return typeof shouldReportError === 'function' ? shouldReportError(code) : defaultShouldReport;
+//     } catch { return defaultShouldReport; }
+//   };
+
+//   // 1) Standard APIError structure
+//   if (data?.code) {
+//     const { code, message, details } = data;
+//     const userMessage = AUTH_ERROR_MESSAGES[code] || message || AUTH_ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR];
+//     if (code === AUTH_ERROR_TYPES.VALIDATION_ERROR && details?.errors && Array.isArray(details.errors)) {
+//       const fieldErrors = details.errors;
+//       const flatMessage = fieldErrors.map(e => e.msg || e.message).filter(Boolean).join('; ') || AUTH_ERROR_MESSAGES[code];
+//       return { message: flatMessage, code, details: fieldErrors, severity: 'warning', timestamp: new Date().toISOString(), shouldReport: false };
+//     }
+//     if (details && typeof details === 'object' && !(code === AUTH_ERROR_TYPES.VALIDATION_ERROR && details?.errors)) {
+//        const specificMessage = details.message || userMessage;
+//        return { message: specificMessage, code, details, severity: getSeverity(code), timestamp: new Date().toISOString(), shouldReport: getShouldReport(code) };
+//      }
+//     return { message: userMessage, code, details: details || null, severity: getSeverity(code), timestamp: new Date().toISOString(), shouldReport: getShouldReport(code) };
+//   }
+//   // 2) Legacy shape under data.error
+//   if (data?.error?.code) {
+//      const { code, message, details } = data.error;
+//      const userMessage = AUTH_ERROR_MESSAGES[code] || message || AUTH_ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR];
+//      return { message: userMessage, code, details: details || null, severity: getSeverity(code), timestamp: new Date().toISOString(), shouldReport: getShouldReport(code) };
+//   }
+//   // 3) Network errors
+//   if (error.message === 'Network Error' || !error.response) {
+//     return { message: AUTH_ERROR_MESSAGES[ERROR_TYPES.SERVICE_UNAVAILABLE], code: ERROR_TYPES.SERVICE_UNAVAILABLE, details: null, severity: 'error', timestamp: new Date().toISOString(), shouldReport: true };
+//   }
+//   // 4) Fallback
+//   console.error("Unknown error structure encountered in extractError:", error);
+//   return { message: AUTH_ERROR_MESSAGES[ERROR_TYPES.UNKNOWN_ERROR], code: ERROR_TYPES.UNKNOWN_ERROR, details: { rawError: error.message }, severity: 'error', timestamp: new Date().toISOString(), shouldReport: true };
+// };
+
+
+// // --- Thunks (sendOTP, verifyOTP, performLogout - remain the same, including logging and error suggestions) ---
+
+// export const sendOTP = createAsyncThunk(/* ... as before ... */
+//   "auth/sendOTP",
+//   async ({ phone, mode }, { rejectWithValue }) => {
+//     try {
+//       const response = await axiosInstance.post("/otp/send", { phone, mode });
+//       return {
+//         message: response.data?.message || 'OTP sent successfully.',
+//         expiresIn: response.data?.expiresIn,
+//         timestamp: new Date().toISOString()
+//       };
+//     } catch (err) {
+//       console.error("--- Raw Axios Error in sendOTP ---"); // Keep logging
+//       if (err.response) { console.error("Status:", err.response.status); try { console.error("Data:", JSON.stringify(err.response.data, null, 2)); } catch (e) { console.error("Data (non-JSON):", err.response.data); } console.error("Headers:", JSON.stringify(err.response.headers, null, 2)); } else if (err.request) { console.error("No response:", err.request); } else { console.error("Setup Error:", err.message); } console.error("Message:", err.message);
+//       const errorData = extractError(err);
+//       console.error('Processed Error Data (sendOTP):', JSON.stringify(errorData, null, 2));
+//       return rejectWithValue(errorData);
+//     }
+//   }
+// );
+
+// export const verifyOTP = createAsyncThunk(/* ... as before ... */
+//   "auth/verifyOTP",
+//   async ({ phone, code, mode }, { rejectWithValue }) => {
+//     try {
+//       await axiosInstance.post("/otp/verify", { phone, code });
+//       const endpoint = mode === "register" ? "/auth/register" : "/auth/login";
+//       const response = await axiosInstance.post(endpoint, { phone, code });
+
+//       if (!response.data?.data?.user || !response.data?.data?.tokens) {
+//           console.error("Invalid response structure from auth endpoint:", response.data);
+//           const err = new Error('Received invalid data after authentication.');
+//           err.response = { data: { code: ERROR_TYPES.UNKNOWN_ERROR, message: err.message } };
+//           throw err;
+//       }
+//       const { user, tokens } = response.data.data;
+
+//       return {
+//         user, // This user object should contain balance and points
+//         accessToken: tokens.accessToken,
+//         refreshToken: tokens.refreshToken,
+//         timestamp: new Date().toISOString()
+//       };
+//     } catch (err) {
+//        console.error("--- Raw Axios Error in verifyOTP ---"); // Keep logging
+//        if (err.response) { console.error("Status:", err.response.status); try { console.error("Data:", JSON.stringify(err.response.data, null, 2)); } catch (e) { console.error("Data (non-JSON):", err.response.data); } console.error("Headers:", JSON.stringify(err.response.headers, null, 2)); } else if (err.request) { console.error("No response:", err.request); } else { console.error("Setup Error:", err.message); } console.error("Message:", err.message);
+//       const errorData = extractError(err);
+//       // Add suggestions based on error code (keep this logic)
+//       switch (errorData.code) {
+//         case AUTH_ERROR_TYPES.USER_EXISTS: errorData.suggestion = 'This phone number is already registered. Please login instead.'; errorData.action = 'NAV_LOGIN'; break;
+//         case AUTH_ERROR_TYPES.NOT_FOUND: errorData.suggestion = 'No account found with this number. Please register first.'; errorData.action = 'NAV_REGISTER'; break;
+//         case AUTH_ERROR_TYPES.OTP_INVALID: errorData.suggestion = 'Invalid or expired code. Please check the code or request a new one.'; errorData.action = 'RETRY_OTP'; break;
+//         case AUTH_ERROR_TYPES.INVALID_PHONE: errorData.suggestion = 'The phone number format is invalid. Please correct it (e.g., 07XXXXXXXX).'; errorData.action = 'RETRY_PHONE'; break;
+//         case AUTH_ERROR_TYPES.VALIDATION_ERROR: errorData.suggestion = errorData.message || 'Please correct the highlighted fields and try again.'; errorData.action = 'RETRY_FORM'; break;
+//         case AUTH_ERROR_TYPES.INVALID_MODE: errorData.suggestion = 'There was an issue processing the request type. Please try again or contact support.'; errorData.action = 'RETRY'; break;
+//         case AUTH_ERROR_TYPES.UNAUTHORIZED: case AUTH_ERROR_TYPES.REVOKED_SESSION: case AUTH_ERROR_TYPES.EXPIRED_SESSION: case AUTH_ERROR_TYPES.INVALID_TOKEN: errorData.suggestion = 'Your session is invalid or expired. Please login again.'; errorData.action = 'FORCE_LOGOUT'; break;
+//         case ERROR_TYPES.SERVICE_UNAVAILABLE: errorData.suggestion = 'Could not connect to the server. Please check your connection and try again.'; errorData.action = 'RETRY_CONNECTION'; break;
+//         default: errorData.suggestion = errorData.message || 'An unexpected error occurred. Please try again or contact support.'; errorData.action = 'RETRY';
+//       }
+//       console.error('Processed Verify OTP/Auth Error:', JSON.stringify(errorData, null, 2));
+//       return rejectWithValue(errorData);
+//     }
+//   }
+// );
+
+// export const performLogout = createAsyncThunk(/* ... as before ... */
+//   "auth/logout",
+//   async (_, { getState, rejectWithValue }) => {
+//     const { refreshToken } = getState().auth;
+//     if (!refreshToken) {
+//       console.warn("Logout attempted without refresh token.");
+//       return { success: true, message: "Already logged out.", timestamp: new Date().toISOString() };
+//     }
+//     try {
+//       await axiosInstance.post("/auth/logout", { refreshToken });
+//       return { success: true, message: "Logout successful.", timestamp: new Date().toISOString() };
+//     } catch (err) {
+//        console.error("--- Raw Axios Error in performLogout ---"); // Keep logging
+//        if (err.response) { console.error("Status:", err.response.status); try { console.error("Data:", JSON.stringify(err.response.data, null, 2)); } catch (e) { console.error("Data (non-JSON):", err.response.data); } console.error("Headers:", JSON.stringify(err.response.headers, null, 2)); } else if (err.request) { console.error("No response:", err.request); } else { console.error("Setup Error:", err.message); } console.error("Message:", err.message);
+//       const errorData = extractError(err);
+//       console.error('Processed Logout API Error:', JSON.stringify(errorData, null, 2));
+//       return rejectWithValue(errorData); // Reject to trigger local cleanup in reducer
+//     }
+//   }
+// );
+
+// // --- *** UPDATED Initial State *** ---
+// const initialState = {
+//   user: null,
+//   balance: null,
+//   points: null, // <-- ADDED points state
+//   accessToken: localStorage.getItem("accessToken"),
+//   refreshToken: localStorage.getItem("refreshToken"),
+//   loading: false,
+//   error: null,
+//   lastAction: null,
+//   lastActionTimestamp: null,
+//   authStatus: localStorage.getItem("accessToken") ? 'authenticated' : 'idle',
+//   retryCount: 0
+// };
+
+// // --- *** UPDATED Slice Reducers & ExtraReducers *** ---
+// const authSlice = createSlice({
+//   name: "auth",
+//   initialState,
+//   reducers: {
+//     updateAccessToken(state, action) {
+//       if (action.payload) {
+//         state.accessToken = action.payload;
+//         localStorage.setItem("accessToken", action.payload);
+//       } else {
+//         state.accessToken = null;
+//         localStorage.removeItem("accessToken");
+//       }
+//     },
+//     updateBalance(state, action) {
+//       const newBalance = parseFloat(action.payload);
+//       if (!isNaN(newBalance)) {
+//           state.balance = newBalance;
+//           if (state.user) {
+//               state.user.balance = newBalance; // Keep user object consistent
+//           }
+//       } else {
+//           console.warn("Invalid payload received for updateBalance:", action.payload);
+//       }
+//     },
+//     // --- ADDED updatePoints Reducer ---
+//     updatePoints(state, action) {
+//       const newPoints = parseInt(action.payload, 10); // Ensure it's an integer
+//       if (!isNaN(newPoints)) {
+//           state.points = newPoints; // Update top-level points state
+//           if (state.user) {
+//               state.user.points = newPoints; // Keep user object consistent
+//           }
+//       } else {
+//           console.warn("Invalid payload received for updatePoints:", action.payload);
+//       }
+//     },
+//     clearError(state) {
+//       state.error = null;
+//       state.retryCount = 0;
+//     },
+//     // --- UPDATED logout Reducer ---
+//     logout(state) {
+//       // Reset all relevant fields, including points
+//       state.user = null;
+//       state.balance = null;
+//       state.points = null; // <-- Clear points
+//       state.accessToken = null;
+//       state.refreshToken = null;
+//       state.error = null;
+//       state.authStatus = 'idle';
+//       state.lastAction = 'MANUAL_LOGOUT';
+//       state.lastActionTimestamp = new Date().toISOString();
+//       localStorage.removeItem("accessToken");
+//       localStorage.removeItem("refreshToken");
+//     },
+//   },
+//   extraReducers: (builder) => {
+//     builder
+//       // sendOTP (no changes needed here for points)
+//       .addCase(sendOTP.pending, (state) => {
+//         state.loading = true; state.error = null; state.lastAction = 'SEND_OTP'; state.authStatus = 'pending_otp';
+//       })
+//       .addCase(sendOTP.fulfilled, (state, action) => {
+//         state.loading = false; state.lastActionTimestamp = action.payload.timestamp; state.authStatus = 'otp_sent'; state.retryCount = 0; state.error = null;
+//       })
+//       .addCase(sendOTP.rejected, (state, action) => {
+//         state.loading = false; state.error = action.payload; state.authStatus = 'failed_otp'; state.retryCount += 1;
+//       })
+
+//       // --- UPDATED verifyOTP.fulfilled ---
+//       .addCase(verifyOTP.pending, (state) => {
+//         state.loading = true; state.error = null; state.lastAction = 'VERIFY_OTP_AUTH'; state.authStatus = 'pending_auth';
+//       })
+//       .addCase(verifyOTP.fulfilled, (state, action) => {
+//         state.loading = false;
+//         state.user = action.payload.user;
+//         // Safely access balance and points from the user object
+//         state.balance = action.payload.user?.balance ?? null;
+//         state.points = action.payload.user?.points ?? null; // <-- Set points state
+//         state.accessToken = action.payload.accessToken;
+//         state.refreshToken = action.payload.refreshToken;
+//         state.lastActionTimestamp = action.payload.timestamp;
+//         state.authStatus = 'authenticated';
+//         state.retryCount = 0;
+//         state.error = null;
+//         localStorage.setItem("accessToken", action.payload.accessToken);
+//         localStorage.setItem("refreshToken", action.payload.refreshToken);
+//       })
+//       .addCase(verifyOTP.rejected, (state, action) => {
+//         state.loading = false; state.error = action.payload; state.authStatus = 'failed_auth'; state.retryCount += 1;
+//         // Don't clear tokens/user data on rejection here, allow retry/error handling
+//       })
+
+//       // --- UPDATED performLogout cases ---
+//       .addCase(performLogout.pending, (state) => {
+//         state.loading = true; state.error = null; state.lastAction = 'LOGOUT'; state.authStatus = 'logging_out';
+//       })
+//       .addCase(performLogout.fulfilled, (state, action) => {
+//         state.loading = false;
+//         state.lastActionTimestamp = action.payload.timestamp;
+//         // Reset state, ensuring points is cleared
+//         Object.assign(state, initialState, { authStatus: 'idle', accessToken: null, refreshToken: null, points: null }); // <-- Ensure points is null
+//         localStorage.removeItem("accessToken");
+//         localStorage.removeItem("refreshToken");
+//       })
+//       .addCase(performLogout.rejected, (state, action) => {
+//         state.loading = false;
+//         state.error = action.payload;
+//         state.lastActionTimestamp = new Date().toISOString();
+//         // Reset state even on API failure, ensuring points is cleared
+//         Object.assign(state, initialState, { authStatus: 'idle', accessToken: null, refreshToken: null, points: null, error: action.payload }); // <-- Ensure points is null
+//         localStorage.removeItem("accessToken");
+//         localStorage.removeItem("refreshToken");
+//         console.error("Logout API failed, but local state cleared. Error:", action.payload);
+//       });
+//   },
+// });
+
+// // --- *** UPDATED Selectors *** ---
+// export const selectAuthLoading     = (state) => state.auth.loading;
+// export const selectAuthErrorObject = (state) => state.auth.error;
+// export const selectAuthErrorMessage = (state) => state.auth.error?.message || null;
+// export const selectAuthErrorCode   = (state) => state.auth.error?.code || null;
+// export const selectAuthErrorDetails = (state) => state.auth.error?.details || null;
+// export const selectAuthErrorSuggestion = (state) => state.auth.error?.suggestion || null;
+// export const selectAuthErrorAction = (state) => state.auth.error?.action || null;
+// export const selectAuthStatus      = (state) => state.auth.authStatus;
+// export const selectIsAuthenticated = (state) => state.auth.authStatus === 'authenticated' && !!state.auth.accessToken;
+// export const selectUser            = (state) => state.auth.user;
+// export const selectBalance         = (state) => state.auth.balance;
+// export const selectPoints          = (state) => state.auth.points; // <-- ADDED points selector
+// export const selectCanRetry        = (state) => state.auth.retryCount < 3;
+
+// // --- *** UPDATED Exported Actions *** ---
+// export const {
+//   updateAccessToken,
+//   updateBalance,
+//   updatePoints, // <-- Export updatePoints
+//   clearError,
+//   logout
+// } = authSlice.actions;
+
+// export default authSlice.reducer;
 
 
 // // authSlice.js
