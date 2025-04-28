@@ -219,7 +219,7 @@ const BetSection = React.memo(
                     </div>
                     <div className="text-gray-400">
                       {bet.user
-                        ? maskPhoneNumber(bet.user)
+                        ? maskPhoneNumber(bet.phone)
                         : maskPhoneNumber(
                             "254" + Math.floor(Math.random() * 900000 + 100000)
                           )}
