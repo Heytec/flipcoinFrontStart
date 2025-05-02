@@ -1504,7 +1504,7 @@ const GameRoom = () => {
         </div>
 
         {/* Side Panel */}
-        <div className="lg:sticky lg:top-24 lg:self-start md:mx-0 absolute top-[87px] left-0 right-0 md:pt-6 bg-[#09101f] rounded-xl flex md:hidden lg:bg-transparent z-10 md:z-0 border-t mx-2 sm:mx-16 justify-center items-center lg:border-t-0 border-gray-800 lg:space-y-6 shadow-2xl lg:shadow-none">
+        <div className="lg:sticky lg:top-24 lg:self-start md:mx-0 absolute top-[87px] left-0 right-0 md:pt-6 bg-[#09101f] rounded-xl flex md:hidden lg:block lg:bg-transparent z-10 md:z-0 border-t mx-2 sm:mx-16 justify-center items-center lg:border-t-0 border-gray-800 lg:space-y-6 shadow-2xl lg:shadow-none">
           {/* Bet Updates Component */}
           <div className="bg-gradient-to-r from-[#0d1526] to-[#09101f] rounded-xl lg:shadow-[2px_0px_0px_#00ff88] w-full">
             <BetUpdates
