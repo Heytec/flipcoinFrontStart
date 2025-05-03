@@ -13,6 +13,7 @@ const BetForm = ({ roundId, disabled }) => {
   const [amount, setAmount] = useState("");
   const [side, setSide] = useState("heads");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
 
   const suggestedAmounts = useMemo(() => [10, 20, 50, 100], []);
 
@@ -52,6 +53,9 @@ const BetForm = ({ roundId, disabled }) => {
             roundId,
             amount: parseFloat(amount),
             side,
+            servicecode: "1000",  
+            sessionId: crypto.randomUUID()
+
           })
         ).unwrap();
 
