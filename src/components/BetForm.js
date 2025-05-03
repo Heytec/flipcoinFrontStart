@@ -13,7 +13,6 @@ const BetForm = ({ roundId, disabled }) => {
   const [amount, setAmount] = useState("");
   const [side, setSide] = useState("heads");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
 
   const suggestedAmounts = useMemo(() => [10, 20, 50, 100], []);
 
@@ -53,9 +52,8 @@ const BetForm = ({ roundId, disabled }) => {
             roundId,
             amount: parseFloat(amount),
             side,
-            servicecode: "1000",  
-            sessionId: crypto.randomUUID()
-
+            servicecode: "1000",
+            sessionId: crypto.randomUUID(),
           })
         ).unwrap();
 
@@ -324,6 +322,312 @@ const BetForm = ({ roundId, disabled }) => {
 };
 
 export default React.memo(BetForm);
+
+
+// // // // // // // // src/components/BetForm.js
+// // // src/components/BetForm.js
+// import React, { useState, useEffect, useCallback, useMemo } from "react";
+// import { useDispatch, useSelector } from "react-redux";
+// import { placeBet, clearError } from "../features/roundSlice";
+// import { toast } from "react-toastify";
+// import { ERROR_TYPES } from "../constants/errorTypes";
+
+// const BetForm = ({ roundId, disabled }) => {
+//   const dispatch = useDispatch();
+//   const { loading, error, errorDetails } = useSelector((state) => state.round);
+
+//   const [amount, setAmount] = useState("");
+//   const [side, setSide] = useState("heads");
+//   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+
+//   const suggestedAmounts = useMemo(() => [10, 20, 50, 100], []);
+
+//   // Error message handler
+//   const getErrorMessage = useCallback((errorDetails) => {
+//     if (!errorDetails) return "An unexpected error occurred";
+//     switch (errorDetails.type) {
+//       case ERROR_TYPES.INSUFFICIENT_BALANCE:
+//         return `Insufficient balance (${errorDetails.details.deficit} needed)`;
+//       case ERROR_TYPES.BETTING_CLOSED:
+//         return "Betting is closed";
+//       case ERROR_TYPES.DUPLICATE_BET:
+//         return `Existing bet: ${errorDetails.details.existingBet.amount} on ${errorDetails.details.existingBet.side}`;
+//       case ERROR_TYPES.INVALID_BET_DATA:
+//         return errorDetails.message || "Invalid bet";
+//       case ERROR_TYPES.NO_ACTIVE_ROUND:
+//         return "No active round";
+//       default:
+//         return errorDetails.message || "Bet placement failed";
+//     }
+//   }, []);
+
+//   // Form submission handler
+//   const onSubmit = useCallback(
+//     async (e) => {
+//       e.preventDefault();
+//       if (!roundId) {
+//         toast.error("No active round!");
+//         return;
+//       }
+//       if (isSubmitting || !amount) return;
+
+//       setIsSubmitting(true);
+//       try {
+//         const result = await dispatch(
+//           placeBet({
+//             roundId,
+//             amount: parseFloat(amount),
+//             side,
+//             servicecode: "1000",  
+//             sessionId: crypto.randomUUID()
+
+//           })
+//         ).unwrap();
+
+//         toast.success(
+//           `Bet placed: ${result.bet.amount} on ${result.bet.side}`,
+//           {
+//             position: "top-center",
+//           }
+//         );
+//         setAmount("");
+//       } catch (err) {
+//         toast.error(getErrorMessage(err), { position: "top-center" });
+//       } finally {
+//         setIsSubmitting(false);
+//       }
+//     },
+//     [roundId, amount, side, isSubmitting, dispatch, getErrorMessage]
+//   );
+
+//   // Amount input handler
+//   const handleAmountChange = useCallback((e) => {
+//     const value = e.target.value;
+//     if (
+//       value === "" ||
+//       (/^\d*\.?\d*$/.test(value) && !isNaN(parseFloat(value)))
+//     ) {
+//       setAmount(value);
+//     }
+//   }, []);
+
+//   // Suggestion click handler
+//   const handleSuggestionClick = useCallback((value) => {
+//     setAmount(value.toString());
+//   }, []);
+
+//   // Side selection handler
+//   const handleSideSelect = useCallback((selectedSide) => {
+//     setSide(selectedSide);
+//   }, []);
+
+//   // Cleanup effect
+//   useEffect(() => {
+//     return () => dispatch(clearError());
+//   }, [dispatch]);
+
+//   return (
+//     <div className="bg-gradient-to-b from-gray-900 to-[#091219] text-white px-1 md:px-6 py-3 rounded-xl shadow-lg border border-gray-800">
+//       <div className="flex items-center justify-center mb-1 ">
+//         <div className="w-1 h-8 bg-red-500 rounded-full mr-3"></div>
+//         <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#00ff88] to-white">
+//           Place Your Bet
+//         </h2>
+//       </div>
+
+//       <form
+//         onSubmit={onSubmit}
+//         className="space-y-4">
+//         {/* Bet Amount Section */}
+//         <div>
+//           {/* <label
+//             htmlFor="amount"
+//             className="text-sm font-medium text-gray-300 mb-3 text-center flex items-center justify-center">
+//             <svg
+//               className="w-4 h-4 mr-2 text-red-400"
+//               fill="currentColor"
+//               viewBox="0 0 20 20"
+//               xmlns="http://www.w3.org/2000/svg">
+//               <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z"></path>
+//               <path
+//                 fillRule="evenodd"
+//                 d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z"
+//                 clipRule="evenodd"></path>
+//             </svg>
+//             Bet Amount (Ksh)
+//           </label> */}
+
+//           <div className="flex flex-col space-y-4">
+//             <div className="flex justify-center">
+//               <div className="relative w-full max-w-[250px]">
+//                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+//                   <span className="text-gray-400">Ksh</span>
+//                 </div>
+//                 <input
+//                   id="amount"
+//                   type="text"
+//                   inputMode="decimal"
+//                   placeholder="Enter amount"
+//                   value={amount}
+//                   onChange={handleAmountChange}
+//                   required
+//                   disabled={isSubmitting || loading}
+//                   className="w-full pl-12 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-center text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#00ff88] focus:border-transparent disabled:bg-gray-700"
+//                 />
+//               </div>
+//             </div>
+
+//             <div className="flex justify-center gap-2">
+//               {[ 10, 20, 50, 100].map((value) => (
+//                 <button
+//                   key={value}
+//                   type="button"
+//                   onClick={() => handleSuggestionClick(value)}
+//                   disabled={isSubmitting || loading}
+//                   className="bg-gradient-to-r from-[#255a5f] to-[#0d1d1e] text-[#00ffbf] px-4 py-2 rounded-lg hover:from-[#1b3a3d] hover:to-[#0d1d1e] hover:shadow-md hover:shadow-[#00ff885d] focus:ring-1 focus:ring-[#00ff88] focus:outline-none disabled:opacity-50 transition-all duration-200">
+//                   {value}
+//                 </button>
+//               ))}
+//             </div>
+//           </div>
+//         </div>
+
+//         {/* Side Selection */}
+//         <div>
+//           <span className=" text-sm font-medium text-gray-300 mb-1 text-center flex items-center justify-center">
+//             <svg
+//               className="w-4 h-4 mr-2 text-red-400"
+//               fill="currentColor"
+//               viewBox="0 0 20 20"
+//               xmlns="http://www.w3.org/2000/svg">
+//               <path
+//                 fillRule="evenodd"
+//                 d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+//                 clipRule="evenodd"></path>
+//             </svg>
+//             Choose Your Side
+//           </span>
+//           <div className="relative flex overflow-hidden">
+//             {["heads", "tails"].map((option, index) => (
+//               <button
+//                 key={option}
+//                 type="button"
+//                 onClick={() => handleSideSelect(option)}
+//                 disabled={isSubmitting || loading}
+//                 className={`relative flex-1 py-4 font-medium text-sm transition-all duration-300 
+//               ${index === 0 ? "mr-1 rounded-l-xl" : "ml-1 rounded-r-xl"}
+//               ${
+//                 side === option
+//                   ? option === "heads"
+//                     ? ` ${
+//                         disabled
+//                           ? "bg-gray-500"
+//                           : "bg-gradient-to-r from-[#00ff88] to-[#0adbdf] text-white shadow-lg border border-[#00ff88]"
+//                       }`
+//                     : `${
+//                         disabled
+//                           ? "bg-gray-500"
+//                           : "bg-gradient-to-r from-[#fd4545] to-[#d41a1a] text-white shadow-lg border border-red-500"
+//                       }`
+//                   : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+//               }
+//               disabled:opacity-50 overflow-hidden`}>
+//                 <div className="flex items-center justify-center w-full">
+//                   {option === "heads" ? (
+//                     <svg
+//                       className="w-5 h-5 mr-2"
+//                       fill="currentColor"
+//                       viewBox="0 0 20 20"
+//                       xmlns="http://www.w3.org/2000/svg">
+//                       <path
+//                         fillRule="evenodd"
+//                         d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"
+//                         clipRule="evenodd"></path>
+//                     </svg>
+//                   ) : (
+//                     <svg
+//                       className="w-5 h-5 mr-2"
+//                       fill="currentColor"
+//                       viewBox="0 0 20 20"
+//                       xmlns="http://www.w3.org/2000/svg">
+//                       <path
+//                         fillRule="evenodd"
+//                         d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z"
+//                         clipRule="evenodd"></path>
+//                     </svg>
+//                   )}
+//                   {option.charAt(0).toUpperCase() + option.slice(1)}
+//                 </div>
+//               </button>
+//             ))}
+//           </div>
+//         </div>
+
+//         {/* Submit Button */}
+//         <div>
+//           <button
+//             type="submit"
+//             disabled={isSubmitting || loading || !amount || !side}
+//             className={`w-full py-3 rounded-lg font-bold tracking-wide focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center space-x-2 uppercase ${
+//               !amount || !side
+//                 ? "bg-gray-600 text-gray-400"
+//                 : side === "heads"
+//                 ? "bg-gradient-to-r from-[#00ff88] to-[#29babd] text-white hover:shadow-lg hover:shadow-[#00ff8833] focus:ring-[#00ff88]"
+//                 : "bg-gradient-to-r from-[#ff3a3a] to-[#ff5757] text-white hover:shadow-lg hover:shadow-[#ff3a3a33] focus:ring-red-500"
+//             }`}>
+//             {isSubmitting || loading ? (
+//               <>
+//                 <svg
+//                   className="animate-spin h-5 w-5"
+//                   viewBox="0 0 24 24">
+//                   <circle
+//                     className="opacity-25"
+//                     cx="12"
+//                     cy="12"
+//                     r="10"
+//                     stroke="currentColor"
+//                     strokeWidth="4"
+//                     fill="none"
+//                   />
+//                   <path
+//                     className="opacity-75"
+//                     fill="currentColor"
+//                     d="M4 12a8 8 0 018-8v8h8a8 8 0 01-8 8v-8H4z"
+//                   />
+//                 </svg>
+//                 <span>Processing...</span>
+//               </>
+//             ) : (
+//               <>
+//                 <svg
+//                   className="w-5 h-5 mr-1"
+//                   fill="none"
+//                   stroke="currentColor"
+//                   viewBox="0 0 24 24"
+//                   xmlns="http://www.w3.org/2000/svg">
+//                   <path
+//                     strokeLinecap="round"
+//                     strokeLinejoin="round"
+//                     strokeWidth="2"
+//                     d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+//                 </svg>
+//                 PLACE YOUR BET
+//               </>
+//             )}
+//           </button>
+//         </div>
+
+//         {/* Additional help text */}
+//         <div className="text-xs text-center text-gray-400">
+//           Min bet: 10 Ksh | Max bet: 10,000 Ksh
+//         </div>
+//       </form>
+//     </div>
+//   );
+// };
+
+// export default React.memo(BetForm);
 
 /********************************************************************************************** */
 //     <div className="bg-gray-900 text-white px-4 py-6 rounded-xl shadow-lg">
