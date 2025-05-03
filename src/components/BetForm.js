@@ -149,7 +149,7 @@ const BetForm = ({ roundId, disabled }) => {
             </div>
 
             <div className="flex justify-center gap-2">
-              {[ 10, 20, 50, 100].map((value) => (
+              {[10, 20, 50, 100].map((value) => (
                 <button
                   key={value}
                   type="button"
@@ -198,33 +198,55 @@ const BetForm = ({ roundId, disabled }) => {
                     : `${
                         disabled
                           ? "bg-gray-500"
-                          : "bg-gradient-to-r from-[#fd4545] to-[#d41a1a] text-white shadow-lg border border-red-500"
+                          : "bg-gradient-to-r from-[#57e6ff] to-[#3a89ff] text-white shadow-lg border border-blue-500"
                       }`
                   : "bg-gray-800 text-gray-300 hover:bg-gray-700"
               }
               disabled:opacity-50 overflow-hidden`}>
                 <div className="flex items-center justify-center w-full">
                   {option === "heads" ? (
-                    <svg
-                      className="w-5 h-5 mr-2"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                      xmlns="http://www.w3.org/2000/svg">
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"
-                        clipRule="evenodd"></path>
-                    </svg>
+                  <svg
+                  className="w-5 h-5 mr-2"
+                  viewBox="0 0 20 20"
+                  xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M17 14L13 10L8 13L3 6"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M6 6L3 6L3 9"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
                   ) : (
                     <svg
                       className="w-5 h-5 mr-2"
-                      fill="currentColor"
                       viewBox="0 0 20 20"
                       xmlns="http://www.w3.org/2000/svg">
                       <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z"
-                        clipRule="evenodd"></path>
+                        d="M3 14L7 10L12 13L17 6"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M14 6L17 6L17 9"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
                     </svg>
                   )}
                   {option.charAt(0).toUpperCase() + option.slice(1)}
@@ -244,7 +266,7 @@ const BetForm = ({ roundId, disabled }) => {
                 ? "bg-gray-600 text-gray-400"
                 : side === "heads"
                 ? "bg-gradient-to-r from-[#00ff88] to-[#29babd] text-white hover:shadow-lg hover:shadow-[#00ff8833] focus:ring-[#00ff88]"
-                : "bg-gradient-to-r from-[#ff3a3a] to-[#ff5757] text-white hover:shadow-lg hover:shadow-[#ff3a3a33] focus:ring-red-500"
+                : "bg-gradient-to-r from-[#3a89ff] to-[#57e6ff] text-white hover:shadow-lg hover:shadow-[#3a89ff52] focus:ring-blue-500"
             }`}>
             {isSubmitting || loading ? (
               <>

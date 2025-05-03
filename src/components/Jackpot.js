@@ -113,7 +113,7 @@ function Jackpot() {
       className={`transition-all duration-500 ${
         isScrolled
           ? "fixed top-0 left-0 right-0 rounded-b-xl z-30"
-          : "absolute top-[207px] left-5 right-6 sm:left-16 sm:right-16 md:top-12 md:right-max z-10" // Adjust positioning as needed
+          : "absolute top-[207px] left-5 right-6 sm:left-16 sm:right-16 md:top-[68px] md:right-max z-10" // Adjust positioning as needed
       } ${showAnimation ? "z-[9999]" : ""}`}
     >
       <motion.div

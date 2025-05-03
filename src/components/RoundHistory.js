@@ -24,12 +24,12 @@ const outcomeStyles = {
     border: "border-blue-400",
     icon: "T"
   },
-  house: {
+  jackpot: {
     bg: "bg-amber-500",
     hover: "hover:bg-amber-400",
     text: "text-gray-900",
     border: "border-amber-300",
-    icon: "E"
+    icon: "J"
   }
 };
 
@@ -88,7 +88,7 @@ const RoundHistory = () => {
   const displayCount = isMobile ? 7: 20;
 
   const validHistory = useMemo(
-    () => history.filter((round) => ["heads", "tails", "house"].includes(round.outcome)),
+    () => history.filter((round) => ["heads", "tails", "jackpot"].includes(round.outcome)),
     [history]
   );
 
@@ -179,8 +179,9 @@ const RoundHistory = () => {
             </div>
           ) : (
             <div>
+              
               <div classNa me=" overflow-hidden md:overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-                <div className={`flex flex-row  pl-0.5 justify-start gap-1.5 overflow-hidden ${isExpanded&& "flex-wrap justify-center gap-3"}`}>
+                <div className={`flex flex-row  pl-0.5 ]  justify-center gap-1.5 overflow-hidden md:overflow-visible ${isExpanded&& "flex-wrap justify-center gap-3"}`}>
                   {displayedRounds.map((round) => (
                     <RoundItem key={round._id} round={round} />
                   ))}
