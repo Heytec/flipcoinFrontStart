@@ -161,7 +161,7 @@ export default function CoinFlip({ round, timeLeft }) {
   const outcome = round?.outcome || "heads";
   
   // Set a maximum time value for the timer (adjust as needed)
-  const maxTime = 30; // Assuming the timer counts down from 30 seconds
+  const maxTime = 20; // Assuming the timer counts down from 30 seconds
 
   // Define an array of three different flip songs
   const flipSongSources = [

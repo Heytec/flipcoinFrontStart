@@ -26,7 +26,7 @@ const outcomeStyles = {
     hover: "hover:bg-amber-400",
     text: "text-gray-900",
     border: "border-amber-300",
-    icon: "E"
+    icon: "J"
   }
 };
 

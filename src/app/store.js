@@ -27,7 +27,7 @@ const authTransform = createTransform(
 const persistConfig = {
   key: "root", // This will use "persist:root" in storage
   storage,
-  transforms: [authTransform],
+  //transforms: [authTransform],
   // Alternatively, if you only want to persist auth:
   // whitelist: ["auth"],
 };
